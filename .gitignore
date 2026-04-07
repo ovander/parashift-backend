@@ -1,0 +1,51 @@
+# 🔒 Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+
+# 🧱 Build artifacts
+parashift
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+dist/
+build/
+
+# 📦 Dependencies (optionnel selon ton choix)
+vendor/
+
+# 📝 Logs
+*.log
+logs/
+*.pid
+
+# 🧪 Coverage / test
+coverage.out
+*.coverprofile
+
+# ⚙️ OS / misc
+.DS_Store
+Thumbs.db
+
+# 🧠 Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 🐳 Docker (si besoin)
+docker-compose.override.yml
+
+# 🔐 Keys / certificates
+*.pem
+*.key
+*.crt
+
+# 📊 Temp / runtime
+tmp/
+*.tmp

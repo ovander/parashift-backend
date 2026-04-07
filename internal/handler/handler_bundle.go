@@ -1,0 +1,79 @@
+package handler
+
+import (
+	"gorm.io/gorm"
+
+	"github.com/ovander/parashift/internal/config"
+	"github.com/ovander/parashift/internal/service"
+)
+
+// HandlerBundle holds all HTTP handlers.
+type HandlerBundle struct {
+	Auth                *AuthHandler
+	Health              *HealthHandler
+	Store               *StoreHandler
+	Employee            *EmployeeHandler
+	AdminEmployee       *AdminEmployeeHandler
+	AdminManager        *AdminManagerHandler
+	ManagerEmployee     *ManagerEmployeeHandler
+	Metadata            *MetadataHandler
+	Options             *OptionsHandler
+	Claim               *ClaimHandler
+	Schedule            *ScheduleHandler
+	WeekTemplate        *WeekTemplateHandler
+	Coverage            *CoverageHandler
+	Availability        *AvailabilityHandler
+	Leave               *LeaveHandler
+	Swap                *SwapHandler
+	Me                  *MeHandler
+	Admin               *AdminHandler
+	AdminDashboard      *AdminDashboardHandler
+	Rule                *RuleHandler
+	ShiftSlot           *ShiftSlotHandler
+	AI                  *AIHandler
+	Debug               *DebugHandler
+	SchedulePlan        *SchedulePlanHandler
+	Qualification       *QualificationHandler
+	PlanningModelMetric *PlanningModelMetricHandler
+	PublicHoliday       *PublicHolidayHandler
+	StoreException      *StoreExceptionHandler
+}
+
+// NewHandlerBundle creates a new HandlerBundle with all handlers initialized.
+// db is passed to the HealthHandler so /readyz can verify the database is reachable.
+func NewHandlerBundle(svc *service.ServiceBundle, cfg *config.Config, db *gorm.DB) *HandlerBundle {
+	b := &HandlerBundle{
+		Auth:                NewAuthHandler(cfg.Socrate),
+		Health:              NewHealthHandler(db),
+		Store:               NewStoreHandler(svc.Store),
+		Employee:            NewEmployeeHandler(svc.Employee),
+		AdminEmployee:       NewAdminEmployeeHandler(svc.Employee),
+		AdminManager:        NewAdminManagerHandler(svc.Employee),
+		ManagerEmployee:     NewManagerEmployeeHandler(svc.Employee),
+		Metadata:            NewMetadataHandler(),
+		Options:             NewOptionsHandler(),
+		Claim:               NewClaimHandler(svc.Employee),
+		Schedule:            NewScheduleHandler(svc.Schedule),
+		WeekTemplate:        NewWeekTemplateHandler(svc.Schedule),
+		Coverage:            NewCoverageHandler(svc.Coverage),
+		Availability:        NewAvailabilityHandler(svc.Availability),
+		Leave:               NewLeaveHandler(svc.Leave),
+		Swap:                NewSwapHandler(svc.Swap),
+		Me:                  NewMeHandler(svc.Employee, svc.Schedule),
+		Admin:               NewAdminHandler(svc.Admin),
+		AdminDashboard:      NewAdminDashboardHandler(svc.AdminDashboard),
+		Rule:                NewRuleHandler(svc.Rule),
+		ShiftSlot:           NewShiftSlotHandler(svc.ShiftSlot),
+		Debug:               NewDebugHandler(),
+		SchedulePlan:        NewSchedulePlanHandler(svc.SchedulePlan),
+		Qualification:       NewQualificationHandler(svc.Qualification),
+		PlanningModelMetric: NewPlanningModelMetricHandler(svc.PlanningModelMetric),
+		PublicHoliday:       NewPublicHolidayHandler(svc.PublicHoliday),
+		StoreException:      NewStoreExceptionHandler(svc.StoreException),
+	}
+	// AI handler is optional — only created when the AI service is available.
+	if svc.AI != nil {
+		b.AI = NewAIHandler(svc.AI)
+	}
+	return b
+}
