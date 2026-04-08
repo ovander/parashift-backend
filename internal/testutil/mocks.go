@@ -57,6 +57,7 @@ func (m *MockStoreRepo) Delete(ctx context.Context, id uuid.UUID) error {
 type MockEmployeeRepo struct {
 	GetByIDFn         func(ctx context.Context, tenantID, id uuid.UUID) (*model.Employee, error)
 	GetByAuthIDFn     func(ctx context.Context, authID string) (*model.Employee, error)
+	GetByEmailFn      func(ctx context.Context, email string) (*model.Employee, error)
 	GetByClaimTokenFn func(ctx context.Context, token string) (*model.Employee, error)
 	ListFn            func(ctx context.Context, tenantID uuid.UUID, page, pageSize int) ([]*model.Employee, int64, error)
 	ListAllFn         func(ctx context.Context, filter repo.EmployeeFilter, page, pageSize int) ([]*model.Employee, int64, error)
@@ -76,6 +77,12 @@ func (m *MockEmployeeRepo) GetByID(ctx context.Context, tenantID, id uuid.UUID) 
 func (m *MockEmployeeRepo) GetByAuthID(ctx context.Context, authID string) (*model.Employee, error) {
 	if m.GetByAuthIDFn != nil {
 		return m.GetByAuthIDFn(ctx, authID)
+	}
+	return nil, nil
+}
+func (m *MockEmployeeRepo) GetByEmail(ctx context.Context, email string) (*model.Employee, error) {
+	if m.GetByEmailFn != nil {
+		return m.GetByEmailFn(ctx, email)
 	}
 	return nil, nil
 }

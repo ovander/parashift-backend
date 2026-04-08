@@ -186,10 +186,10 @@ func newTestServer(t *testing.T, mocks *testMocks) *httptest.Server {
 
 	// Pass nil for db — e2e tests use mock repos, not a real DB connection.
 	// HealthHandler.Ready handles nil db gracefully (returns 503 with "not_configured").
-	handlers := handler.NewHandlerBundle(svcBundle, cfg, nil)
+	handlers := handler.NewHandlerBundle(svcBundle, cfg, nil, handler.BuildInfo{Version: "test", Commit: "test", BuildTime: "test"})
 
 	rbacMW := middleware.NewRBACMiddleware(logger.WithField("mw", "rbac"))
-	tenantMW := middleware.NewTenantMiddleware(mocks.emp, logger.WithField("mw", "tenant"))
+	tenantMW := middleware.NewTenantMiddleware(mocks.emp, logger.WithField("mw", "tenant"), "" /* no userinfo in tests */)
 	limiter := httpware.NewRateLimiter(10000, 20000)
 
 	mw := router.Middleware{
