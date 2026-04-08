@@ -48,4 +48,4 @@ docker-compose.override.yml
 
 # 📊 Temp / runtime
 tmp/
-*.tmp
+*.tmpapp
