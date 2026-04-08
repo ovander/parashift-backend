@@ -125,7 +125,7 @@ func (r *employeeRepository) ListAll(ctx context.Context, filter EmployeeFilter,
 	case "noStore":
 		q = q.Where("s.id IS NULL OR s.deleted_at IS NOT NULL")
 	case "noRole":
-		q = q.Where("e.role = '' OR e.role IS NULL")
+		q = q.Where("e.job_role = '' OR e.job_role IS NULL")
 	case "expiredTokens":
 		expiry := time.Now().Add(-inviteTokenExpiry)
 		q = q.Where("e.claim_token IS NOT NULL AND e.created_at < ?", expiry)
@@ -180,6 +180,21 @@ func (r *employeeRepository) GetByIDGlobal(ctx context.Context, id uuid.UUID) (*
 	emp := rr.Employee
 	emp.StoreName = rr.StoreName
 	return &emp, nil
+}
+
+// GetByEmail retrieves an unlinked employee (auth_id='') matching the given email (global lookup).
+// Returns nil, nil when not found. Used for auto-linking on first login.
+func (r *employeeRepository) GetByEmail(ctx context.Context, email string) (*model.Employee, error) {
+	var employee model.Employee
+	if err := r.db.WithContext(ctx).
+		Where("email = ? AND (auth_id = '' OR auth_id IS NULL) AND deleted_at IS NULL", email).
+		First(&employee).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &employee, nil
 }
 
 // DeleteGlobal soft-deletes any employee by ID regardless of tenant.

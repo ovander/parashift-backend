@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/ovander/backendkit/apierror"
 	"github.com/ovander/backendkit/ctxutil"
@@ -11,13 +14,60 @@ import (
 
 // TenantMiddleware resolves the authenticated employee from the JWT sub claim.
 type TenantMiddleware struct {
-	empRepo repo.EmployeeRepository
-	logger  *logrus.Entry
+	empRepo        repo.EmployeeRepository
+	logger         *logrus.Entry
+	socrateBaseURL string        // e.g. "https://golfperformance.fr" — used for /oauth/userinfo
+	httpClient     *http.Client
 }
 
 // NewTenantMiddleware creates a new TenantMiddleware.
-func NewTenantMiddleware(empRepo repo.EmployeeRepository, logger *logrus.Entry) *TenantMiddleware {
-	return &TenantMiddleware{empRepo: empRepo, logger: logger}
+// socrateBaseURL is the public OAuth base URL used to call /oauth/userinfo when
+// the access token doesn't carry an email claim (which is the common case).
+// Pass "" to disable the userinfo lookup (auto-link will be silently skipped).
+func NewTenantMiddleware(empRepo repo.EmployeeRepository, logger *logrus.Entry, socrateBaseURL string) *TenantMiddleware {
+	return &TenantMiddleware{
+		empRepo:        empRepo,
+		logger:         logger,
+		socrateBaseURL: strings.TrimRight(socrateBaseURL, "/"),
+		httpClient:     &http.Client{Timeout: 3 * time.Second},
+	}
+}
+
+// fetchEmailFromUserinfo calls Socrate's /oauth/userinfo endpoint with the
+// Bearer token already present in the Authorization header of r.
+// Returns "" on any error (auto-link is best-effort).
+func (m *TenantMiddleware) fetchEmailFromUserinfo(r *http.Request) string {
+	if m.socrateBaseURL == "" {
+		return ""
+	}
+	bearer := r.Header.Get("Authorization")
+	if bearer == "" {
+		return ""
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet,
+		m.socrateBaseURL+"/oauth/userinfo", nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Authorization", bearer)
+
+	resp, err := m.httpClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return ""
+	}
+	defer resp.Body.Close()
+
+	var profile struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&profile); err != nil {
+		return ""
+	}
+	return profile.Email
 }
 
 // Handler is the chi-compatible middleware function.
@@ -45,6 +95,39 @@ func (m *TenantMiddleware) Handler(next http.Handler) http.Handler {
 			apierror.Internal("internal error").WriteJSON(w)
 			return
 		}
+
+		if emp == nil {
+			// Auto-link: if no employee is bound to this auth_id yet, look up the email
+			// from Socrate's /oauth/userinfo endpoint (access tokens don't carry email in
+			// their JWT claims — only ID tokens do). On a match we bind the two records
+			// together so every subsequent request goes through the fast GetByAuthID path.
+			email := ctxutil.GetUserEmail(ctx) // populated only when an ID token is used
+			if email == "" {
+				email = m.fetchEmailFromUserinfo(r)
+			}
+			if email != "" {
+				emp, err = m.empRepo.GetByEmail(ctx, email)
+				if err != nil {
+					m.logger.WithError(err).WithFields(logrus.Fields{"sub": sub, "email": email}).
+						Error("db error during email-based auto-link lookup")
+					apierror.Internal("internal error").WriteJSON(w)
+					return
+				}
+				if emp != nil {
+					// Found a match — bind the Socrate sub to this employee record.
+					emp.AuthID = sub
+					if updateErr := m.empRepo.Update(ctx, emp); updateErr != nil {
+						m.logger.WithError(updateErr).WithFields(logrus.Fields{"sub": sub, "email": email, "employee_id": emp.ID}).
+							Error("failed to auto-link employee auth_id")
+						apierror.Internal("internal error").WriteJSON(w)
+						return
+					}
+					m.logger.WithFields(logrus.Fields{"sub": sub, "email": email, "employee_id": emp.ID}).
+						Info("auto-linked employee to Socrate sub via email match")
+				}
+			}
+		}
+
 		if emp == nil {
 			m.logger.WithField("sub", sub).Warn("no employee found for sub — user not provisioned")
 			apierror.NotFound("employee", sub).WriteJSON(w)

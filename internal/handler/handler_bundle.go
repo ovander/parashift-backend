@@ -10,6 +10,7 @@ import (
 // HandlerBundle holds all HTTP handlers.
 type HandlerBundle struct {
 	Auth                *AuthHandler
+	Version             *VersionHandler
 	Health              *HealthHandler
 	Store               *StoreHandler
 	Employee            *EmployeeHandler
@@ -39,11 +40,19 @@ type HandlerBundle struct {
 	StoreException      *StoreExceptionHandler
 }
 
+// BuildInfo holds the values injected at link time via -ldflags.
+type BuildInfo struct {
+	Version   string
+	Commit    string
+	BuildTime string
+}
+
 // NewHandlerBundle creates a new HandlerBundle with all handlers initialized.
 // db is passed to the HealthHandler so /readyz can verify the database is reachable.
-func NewHandlerBundle(svc *service.ServiceBundle, cfg *config.Config, db *gorm.DB) *HandlerBundle {
+func NewHandlerBundle(svc *service.ServiceBundle, cfg *config.Config, db *gorm.DB, build BuildInfo) *HandlerBundle {
 	b := &HandlerBundle{
 		Auth:                NewAuthHandler(cfg.Socrate),
+		Version:             NewVersionHandler(build.Version, build.Commit, build.BuildTime),
 		Health:              NewHealthHandler(db),
 		Store:               NewStoreHandler(svc.Store),
 		Employee:            NewEmployeeHandler(svc.Employee),

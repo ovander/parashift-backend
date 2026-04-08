@@ -61,6 +61,7 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 	// without the /api/v1 prefix.
 	r.Get("/healthz", handlers.Health.Check)
 	r.Get("/readyz", handlers.Health.Ready)
+	r.Get("/api/version", handlers.Version.Get)
 
 	// Auth endpoints are public but rate-limited to resist brute-force and
 	// credential-stuffing. A global (not per-tenant) limiter is used here because

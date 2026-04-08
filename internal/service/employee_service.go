@@ -122,8 +122,10 @@ func (s *EmployeeService) Create(ctx context.Context, tenantID uuid.UUID, req dt
 	if req.Position != "manager" && req.Position != "employee" {
 		return nil, apierror.BadRequest("position must be 'manager' or 'employee'")
 	}
-	if req.JobRole == "" {
-		return nil, apierror.BadRequest("job_role is required")
+	// job_role is required for employees but optional for managers (who manage
+	// the store rather than filling shift slots requiring a specific role).
+	if req.JobRole == "" && req.Position == "employee" {
+		return nil, apierror.BadRequest("job_role is required for employees")
 	}
 
 	emp := &model.Employee{

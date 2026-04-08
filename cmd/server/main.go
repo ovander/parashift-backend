@@ -11,6 +11,19 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/ovander/parashift/internal/config"
+	"github.com/ovander/parashift/internal/handler"
+	"github.com/sirupsen/logrus"
+)
+
+// version, buildTime, and commit are injected at link time via -ldflags:
+//
+//	-X main.version=1.0.3 -X main.buildTime=2026-04-08T05:00:00Z -X main.commit=a3f9c12
+//
+// All default to "dev" / "unknown" when built without those flags (local dev).
+var (
+	version   = "dev"
+	buildTime = "unknown"
+	commit    = "unknown"
 )
 
 func main() {
@@ -25,8 +38,32 @@ func main() {
 	}
 
 	logger := newLogger(cfg)
+	logger.WithFields(logrus.Fields{
+		"version":    version,
+		"build_time": buildTime,
+		"commit":     commit,
+	}).Info("ParaShift binary starting")
 
-	res, err := bootstrap(cfg, logger)
+	// migrate-only mode: apply SQL migrations and exit.
+	// Usage: ./server migrate
+	// Intended for use as a one-shot init container or pre-deploy job.
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		db, err := initDB(cfg, logger)
+		if err != nil {
+			logger.Fatalf("migrate: db connect: %v", err)
+		}
+		if err := runMigrations(cfg, db); err != nil {
+			logger.Fatalf("migrate: %v", err)
+		}
+		logger.Info("migrations complete — exiting")
+		os.Exit(0)
+	}
+
+	res, err := bootstrap(cfg, logger, handler.BuildInfo{
+		Version:   version,
+		Commit:    commit,
+		BuildTime: buildTime,
+	})
 	if err != nil {
 		logger.Fatalf("bootstrap: %v", err)
 	}

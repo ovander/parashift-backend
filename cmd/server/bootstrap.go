@@ -41,7 +41,7 @@ type AppResources struct {
 }
 
 // bootstrap initialises all application layers in strict dependency order.
-func bootstrap(cfg *config.Config, logger *logrus.Logger) (*AppResources, error) {
+func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInfo) (*AppResources, error) {
 	entry := logger.WithField("component", "bootstrap")
 
 	// Step 3: Socrate connectivity checks
@@ -81,10 +81,10 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger) (*AppResources, error)
 	// Steps 7-9
 	repos    := repo.NewRepoBundle(db)
 	services := service.NewServiceBundle(repos, logger.WithField("component", "service"), cfg)
-	handlers := handler.NewHandlerBundle(services, cfg, db)
+	handlers := handler.NewHandlerBundle(services, cfg, db, build)
 
 	// Step 10: Middleware
-	tenantMW := middleware.NewTenantMiddleware(repos.Employee, logger.WithField("component", "tenant"))
+	tenantMW := middleware.NewTenantMiddleware(repos.Employee, logger.WithField("component", "tenant"), cfg.Socrate.BaseURL)
 	rbacMW   := middleware.NewRBACMiddleware(logger.WithField("component", "rbac"))
 	limiter  := httpware.NewRateLimiter(100, 200)
 
@@ -367,6 +367,10 @@ func pingSocrateAdmin(cfg *config.Config, log *logrus.Entry) {
 	switch {
 	case resp2.StatusCode == http.StatusOK || resp2.StatusCode == http.StatusPartialContent:
 		log.Infof("Socrate admin API reachable and app ID %s accepted ✓", resolvedAppID)
+	case resp2.StatusCode == http.StatusMethodNotAllowed:
+		// 405 means the route exists and auth passed — Socrate just doesn't support GET
+		// listing on the service/users endpoint (POST-only). Invite emails will work fine.
+		log.Infof("Socrate admin API reachable and app ID %s accepted ✓ (probe got 405 — POST-only endpoint, expected)", resolvedAppID)
 	case resp2.StatusCode == http.StatusNotFound && !isJSON:
 		log.Warnf("Socrate admin probe: plain-text 404 from %s — GET /api/apps/{id}/service/users may not exist in this Socrate version. "+
 			"Invite emails will likely fail at runtime.", probeURL)

@@ -44,6 +44,9 @@ type EmployeeRepository interface {
 	GetByAuthID(ctx context.Context, authID string) (*model.Employee, error)
 	// GetByClaimToken retrieves an unclaimed employee by their one-time invite token (global lookup).
 	GetByClaimToken(ctx context.Context, token string) (*model.Employee, error)
+	// GetByEmail retrieves an unlinked employee (auth_id='') matching the given email (global lookup).
+	// Returns nil, nil when not found. Used for auto-linking on first login.
+	GetByEmail(ctx context.Context, email string) (*model.Employee, error)
 	// List retrieves all employees for a tenant with pagination.
 	List(ctx context.Context, tenantID uuid.UUID, page, pageSize int) ([]*model.Employee, int64, error)
 	// ListAll retrieves employees cross-tenant with optional filtering and pagination.

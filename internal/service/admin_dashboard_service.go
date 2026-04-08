@@ -126,7 +126,7 @@ func (s *AdminDashboardService) GetDashboard(ctx context.Context) (*AdminDashboa
 		Where("deleted_at IS NULL").
 		Select(`
 			COUNT(*)                                                      AS total,
-			COUNT(*) FILTER (WHERE role = 'manager')                     AS managers,
+			COUNT(*) FILTER (WHERE position = 'manager')                 AS managers,
 			COUNT(*) FILTER (WHERE auth_id <> '')                        AS active,
 			COUNT(*) FILTER (WHERE email <> '' AND auth_id = '')         AS pending,
 			COUNT(*) FILTER (WHERE claim_token IS NOT NULL)              AS unclaim
@@ -160,7 +160,7 @@ func (s *AdminDashboardService) GetDashboard(ctx context.Context) (*AdminDashboa
 		Table("employees").
 		Where("deleted_at IS NULL").
 		Select(`
-			COUNT(*) FILTER (WHERE role = '' OR role IS NULL)                  AS no_role,
+			COUNT(*) FILTER (WHERE job_role = '' OR job_role IS NULL)          AS no_role,
 			COUNT(*) FILTER (WHERE claim_token IS NOT NULL AND created_at < ?) AS expired_tokens
 		`, expiryDate).
 		Scan(&roleAndExpiry).Error; err != nil {
