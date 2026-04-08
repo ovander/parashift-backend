@@ -15,9 +15,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// version, buildTime, and commit are injected at link time via -ldflags:
+// version, buildTime, and commit are injected at link time via -ldflags.
+// Variable names are case-sensitive and must match exactly:
 //
-//	-X main.version=1.0.3 -X main.buildTime=2026-04-08T05:00:00Z -X main.commit=a3f9c12
+//	-X main.version=1.1.0 -X main.commit=a3f9c12 -X main.buildTime=2026-04-08T12:00:00Z
 //
 // All default to "dev" / "unknown" when built without those flags (local dev).
 var (

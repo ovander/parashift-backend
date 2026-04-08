@@ -1,11 +1,23 @@
-.PHONY: run build test lint migrate-up migrate-down migrate-create docker-up docker-down
+.PHONY: run build push test lint migrate-up migrate-down migrate-create docker-up docker-down
 
 # Application
 run:
 	go run ./cmd/server
 
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+
 build:
-	CGO_ENABLED=0 go build -ldflags="-w -s" -o bin/parashift ./cmd/server
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+	  -ldflags="-s -w \
+	    -X main.version=$(VERSION) \
+	    -X main.commit=$(COMMIT) \
+	    -X main.buildTime=$(BUILD_TIME)" \
+	  -o bin/parashift ./cmd/server
+
+push:
+	./scripts/push.sh $(VERSION)
 
 # Testing
 test:
