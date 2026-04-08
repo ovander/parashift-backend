@@ -1,0 +1,1 @@
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS ab_week_anchor DATE;

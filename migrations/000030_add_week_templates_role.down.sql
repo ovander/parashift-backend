@@ -1,0 +1,1 @@
+ALTER TABLE week_templates DROP COLUMN IF EXISTS role;
