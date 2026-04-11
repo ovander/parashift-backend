@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/joho/godotenv"
 	"github.com/ovander/parashift/internal/config"
 	"github.com/ovander/parashift/internal/handler"
@@ -91,5 +92,7 @@ func main() {
 	res.Limiter.Stop()
 	sqlDB, _ := res.DB.DB()
 	sqlDB.Close()
+	// Flush any buffered Sentry events before the process exits.
+	sentry.Flush(2 * time.Second)
 	logger.Info("shutdown complete")
 }

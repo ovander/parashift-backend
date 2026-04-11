@@ -23,6 +23,7 @@ type Config struct {
 	DBPool              DBPoolConfig
 	JWKS                JWKSConfig
 	AI                  AIConfig
+	Sentry              SentryConfig
 }
 
 // AIConfig holds configuration for the AI gateway (Phase 3).
@@ -54,6 +55,12 @@ type DBPoolConfig struct {
 type JWKSConfig struct {
 	URL    string
 	Issuer string
+}
+
+// SentryConfig holds Sentry error monitoring configuration.
+// Leave DSN empty (or unset) to disable monitoring silently.
+type SentryConfig struct {
+	DSN string
 }
 
 // Load creates a Config from environment variables.
@@ -91,6 +98,9 @@ func Load() *Config {
 			Model:           getEnv("AI_MODEL", "claude-sonnet-4-6"),
 			MaxTokens:       getEnvInt("AI_MAX_TOKENS", 2000),
 			TimeoutSec:      getEnvInt("AI_TIMEOUT_SEC", 30),
+		},
+		Sentry: SentryConfig{
+			DSN: getEnv("SENTRY_DSN", ""),
 		},
 	}
 }

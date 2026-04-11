@@ -14,6 +14,8 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	migratepostgres "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	sentry "github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	glogger "gorm.io/gorm/logger"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -40,9 +42,32 @@ type AppResources struct {
 	Limiter  *httpware.RateLimiter
 }
 
+// initSentry configures the Sentry SDK when SENTRY_DSN is set.
+// A missing DSN is not an error — monitoring is simply disabled.
+func initSentry(cfg *config.Config, logger *logrus.Logger) {
+	if cfg.Sentry.DSN == "" {
+		logger.Info("SENTRY_DSN not set — error monitoring disabled")
+		return
+	}
+	if err := sentry.Init(sentry.ClientOptions{
+		Dsn:              cfg.Sentry.DSN,
+		Environment:      cfg.Env,
+		AttachStacktrace: true,
+		TracesSampleRate: 0.1,
+	}); err != nil {
+		// Non-fatal: log and continue — the app runs fine without Sentry.
+		logger.WithError(err).Warn("Sentry initialisation failed")
+		return
+	}
+	logger.WithField("env", cfg.Env).Info("Sentry error monitoring active")
+}
+
 // bootstrap initialises all application layers in strict dependency order.
 func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInfo) (*AppResources, error) {
 	entry := logger.WithField("component", "bootstrap")
+
+	// Step 2.5: Sentry — init before any application code so bootstrap panics are captured
+	initSentry(cfg, logger)
 
 	// Step 3: Socrate connectivity checks
 	pingSocrate(cfg, entry)
@@ -98,6 +123,16 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 
 	// Step 11-12: Router + Server
 	r := router.NewRouter(cfg, handlers, mw)
+
+	// Wrap outermost handler with Sentry HTTP middleware when DSN is configured.
+	// Repanic: true lets the existing panic recovery middleware handle the response
+	// after Sentry has captured the event.
+	var httpHandler http.Handler = r
+	if cfg.Sentry.DSN != "" {
+		httpHandler = sentryhttp.New(sentryhttp.Options{Repanic: true}).Handle(r)
+		entry.Info("Sentry HTTP middleware active")
+	}
+
 	// WriteTimeout must exceed the longest per-route httpware.Timeout context.
 	// The AI handler uses cfg.AI.TimeoutSec (default 30s); add a 15s buffer for
 	// response serialisation and network flush. This prevents Caddy from seeing
@@ -105,7 +140,7 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 	writeTimeout := time.Duration(cfg.AI.TimeoutSec+15) * time.Second
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      r,
+		Handler:      httpHandler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: writeTimeout,
 		IdleTimeout:  60 * time.Second,
