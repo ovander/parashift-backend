@@ -56,6 +56,7 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 	r.Use(httpware.SecurityHeaders)
 	r.Use(httpware.BodyLimit(cfg.MaxRequestBodyBytes))
 	r.Use(httpware.Recover(mw.Logger.WithField("component", "recover")))
+	r.Use(middleware.Locale) // T1.5: inject Accept-Language locale into request context
 
 	// Public routes (no auth required) — kept at root so auth store can call them
 	// without the /api/v1 prefix.
@@ -104,6 +105,7 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 
 				// Current user endpoints
 				r.Get("/me", handlers.Me.GetProfile)
+				r.Patch("/me/locale", handlers.Me.UpdateLocale)
 				r.Get("/me/schedule", handlers.Me.GetMySchedule)
 				r.Get("/me/schedule.ics", handlers.Me.ExportICS)
 

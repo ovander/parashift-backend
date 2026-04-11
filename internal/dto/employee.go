@@ -29,6 +29,7 @@ type UpdateEmployeeRequest struct {
 	Position  *string    `json:"position"` // manager|employee
 	JobRole   *string    `json:"job_role"` // pharmacist|animator|logistics_agent|...
 	StartDate *time.Time `json:"start_date"`
+	Locale    *string    `json:"locale,omitempty"` // preferred UI locale — "fr" | "en"
 }
 
 // EmployeeResponse is the DTO for returning employee information.

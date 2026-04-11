@@ -117,13 +117,18 @@ type AssignmentResponse struct {
 // Unlike model.RuleViolation (which carries only rule-level context),
 // RuleViolationDTO includes ShiftID and EmployeeID so the frontend can map
 // violations to calendar cells without reconstructing composite keys.
+//
+// Key and Params enable the frontend to call t(key, params) for a localised
+// error message instead of displaying the raw English Message string.
 type RuleViolationDTO struct {
-	RuleID     uuid.UUID `json:"rule_id"`
-	RuleType   string    `json:"rule_type"`
-	Severity   string    `json:"severity"` // BLOCKING|WARNING|INFO
-	Message    string    `json:"message"`
-	ShiftID    uuid.UUID `json:"shift_id"`
-	EmployeeID uuid.UUID `json:"employee_id"`
+	RuleID     uuid.UUID      `json:"rule_id"`
+	RuleType   string         `json:"rule_type"`
+	Severity   string         `json:"severity"` // BLOCKING|WARNING|INFO
+	Message    string         `json:"message"`
+	Key        string         `json:"key,omitempty"`    // i18n key for frontend t()
+	Params     map[string]any `json:"params,omitempty"` // template params for t(key, params)
+	ShiftID    uuid.UUID      `json:"shift_id"`
+	EmployeeID uuid.UUID      `json:"employee_id"`
 }
 
 // ValidationErrorResponse is returned as HTTP 422 when an assignment is
