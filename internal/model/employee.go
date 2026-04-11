@@ -17,6 +17,7 @@ type Employee struct {
 	Email       string         `gorm:"default:''"` // used to send Socrate invite
 	AuthID      string         `gorm:"default:'';index"` // Socrate sub claim; empty until the invite is claimed
 	ClaimToken  *string        `gorm:"uniqueIndex"`      // one-time fallback invite token; nil once claimed
+	Locale      string         `gorm:"not null;default:'fr'"` // UI locale — 'fr' | 'en'
 	Preferences datatypes.JSON `gorm:"type:jsonb"` // flexible per-employee preferences (shift preferences, notifications, etc.)
 
 	// Virtual fields — populated by JOIN queries, not persisted to DB.
