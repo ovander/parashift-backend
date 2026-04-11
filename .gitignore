@@ -50,3 +50,8 @@ docker-compose.override.yml
 tmp/
 *.tmpapp
 app
+
+# binaries
+server
+app
+*.exe
