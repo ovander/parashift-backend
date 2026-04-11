@@ -51,6 +51,14 @@ func extractResource(evt Event) (resourceType string, resourceID string) {
 			return "leave_request", l.ID.String()
 		}
 
+	case TypeLeaveDeleted:
+		if m, ok := evt.Payload.(map[string]interface{}); ok {
+			if id, ok := m["id"].(uuid.UUID); ok {
+				return "leave_request", id.String()
+			}
+		}
+		return "leave_request", ""
+
 	case TypeAssignmentCreated, TypeAssignmentUpdated:
 		if a, ok := evt.Payload.(*model.ShiftAssignment); ok {
 			return "assignment", a.ID.String()
@@ -74,6 +82,9 @@ func extractResource(evt Event) (resourceType string, resourceID string) {
 		}
 		return "shift", ""
 
+	case TypeScheduleGenerated:
+		return "schedule", ""
+
 	case TypeSwapCreated, TypeSwapUpdated:
 		if s, ok := evt.Payload.(*model.SwapRequest); ok {
 			return "swap_request", s.ID.String()
@@ -82,6 +93,19 @@ func extractResource(evt Event) (resourceType string, resourceID string) {
 	case TypeEmployeeCreated, TypeEmployeeUpdated:
 		if e, ok := evt.Payload.(*model.Employee); ok {
 			return "employee", e.ID.String()
+		}
+
+	case TypeEmployeeDeleted:
+		if m, ok := evt.Payload.(map[string]interface{}); ok {
+			if id, ok := m["id"].(uuid.UUID); ok {
+				return "employee", id.String()
+			}
+		}
+		return "employee", ""
+
+	case TypeStoreCreated, TypeStoreUpdated:
+		if s, ok := evt.Payload.(*model.Store); ok {
+			return "store", s.ID.String()
 		}
 	}
 

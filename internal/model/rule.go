@@ -33,10 +33,12 @@ type Rule struct {
 // RuleViolation describes a single rule that was violated during evaluation.
 // It is the external representation (failures only) returned to callers.
 type RuleViolation struct {
-	RuleID   string `json:"rule_id"`
-	RuleType string `json:"rule_type"`
-	Severity string `json:"severity"`
-	Message  string `json:"message"`
+	RuleID   string         `json:"rule_id"`
+	RuleType string         `json:"rule_type"`
+	Severity string         `json:"severity"`
+	Message  string         `json:"message"`          // English dev-facing message
+	Key      string         `json:"key,omitempty"`    // i18n key for frontend
+	Params   map[string]any `json:"params,omitempty"` // template params for t(key, params)
 }
 
 // IsBlocking returns true when the violation should prevent the operation.
@@ -45,11 +47,13 @@ func (v RuleViolation) IsBlocking() bool { return v.Severity == RuleSeverityBloc
 // RuleResult is the internal outcome of evaluating a single rule. It includes
 // both PASS and FAIL outcomes so the engine can build a full audit trail.
 type RuleResult struct {
-	RuleID   string `json:"rule_id"`
-	RuleType string `json:"rule_type"`
-	Severity string `json:"severity"`
-	Status   string `json:"status"` // PASS | FAIL
-	Message  string `json:"message,omitempty"`
+	RuleID   string         `json:"rule_id"`
+	RuleType string         `json:"rule_type"`
+	Severity string         `json:"severity"`
+	Status   string         `json:"status"` // PASS | FAIL
+	Message  string         `json:"message,omitempty"`
+	Key      string         `json:"key,omitempty"`
+	Params   map[string]any `json:"params,omitempty"`
 }
 
 // IsBlocking returns true when this is a blocking failure.
@@ -67,6 +71,8 @@ func FilterViolations(results []RuleResult) []RuleViolation {
 				RuleType: r.RuleType,
 				Severity: r.Severity,
 				Message:  r.Message,
+				Key:      r.Key,
+				Params:   r.Params,
 			})
 		}
 	}

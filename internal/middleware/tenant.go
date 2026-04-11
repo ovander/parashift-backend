@@ -85,14 +85,14 @@ func (m *TenantMiddleware) Handler(next http.Handler) http.Handler {
 		// Resolve employee from Socrate sub claim
 		sub := ctxutil.GetUserSub(ctx)
 		if sub == "" {
-			apierror.Unauthorized("missing user identity").WriteJSON(w)
+			apierror.Unauthorized("missing user identity").WithKey("errors.accessDenied").WriteJSON(w)
 			return
 		}
 
 		emp, err := m.empRepo.GetByAuthID(ctx, sub)
 		if err != nil {
 			m.logger.WithError(err).WithField("sub", sub).Error("db error resolving employee for sub")
-			apierror.Internal("internal error").WriteJSON(w)
+			apierror.Internal("internal error").WithKey("errors.unknown").WriteJSON(w)
 			return
 		}
 
@@ -110,7 +110,7 @@ func (m *TenantMiddleware) Handler(next http.Handler) http.Handler {
 				if err != nil {
 					m.logger.WithError(err).WithFields(logrus.Fields{"sub": sub, "email": email}).
 						Error("db error during email-based auto-link lookup")
-					apierror.Internal("internal error").WriteJSON(w)
+					apierror.Internal("internal error").WithKey("errors.unknown").WriteJSON(w)
 					return
 				}
 				if emp != nil {
@@ -119,7 +119,7 @@ func (m *TenantMiddleware) Handler(next http.Handler) http.Handler {
 					if updateErr := m.empRepo.Update(ctx, emp); updateErr != nil {
 						m.logger.WithError(updateErr).WithFields(logrus.Fields{"sub": sub, "email": email, "employee_id": emp.ID}).
 							Error("failed to auto-link employee auth_id")
-						apierror.Internal("internal error").WriteJSON(w)
+						apierror.Internal("internal error").WithKey("errors.unknown").WriteJSON(w)
 						return
 					}
 					m.logger.WithFields(logrus.Fields{"sub": sub, "email": email, "employee_id": emp.ID}).
@@ -130,7 +130,7 @@ func (m *TenantMiddleware) Handler(next http.Handler) http.Handler {
 
 		if emp == nil {
 			m.logger.WithField("sub", sub).Warn("no employee found for sub — user not provisioned")
-			apierror.NotFound("employee", sub).WriteJSON(w)
+			apierror.NotFound("employee", sub).WithKey("errors.notFound").WriteJSON(w)
 			return
 		}
 

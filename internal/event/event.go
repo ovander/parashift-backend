@@ -30,6 +30,16 @@ const (
 	TypeEmployeeCreated EventType = "employee.created"
 	// TypeEmployeeUpdated is fired when an employee is updated
 	TypeEmployeeUpdated EventType = "employee.updated"
+	// TypeEmployeeDeleted is fired when an employee is deleted
+	TypeEmployeeDeleted EventType = "employee.deleted"
+	// TypeLeaveDeleted is fired when a leave request is cancelled
+	TypeLeaveDeleted EventType = "leave.deleted"
+	// TypeStoreCreated is fired when a new store is created
+	TypeStoreCreated EventType = "store.created"
+	// TypeStoreUpdated is fired when a store is updated
+	TypeStoreUpdated EventType = "store.updated"
+	// TypeScheduleGenerated is fired when a schedule is bulk-generated
+	TypeScheduleGenerated EventType = "schedule.generated"
 )
 
 // Event represents a domain event in the system.

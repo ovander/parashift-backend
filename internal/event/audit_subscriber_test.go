@@ -149,6 +149,88 @@ func TestExtractResource_EmployeeUpdated(t *testing.T) {
 	assert.Equal(t, e.ID.String(), rID)
 }
 
+// ── Employee deleted ──────────────────────────────────────────────────────────
+
+func TestExtractResource_EmployeeDeleted_MapWithID(t *testing.T) {
+	id := uuid.New()
+	payload := map[string]interface{}{"id": id}
+
+	rType, rID := extractResource(Event{Type: TypeEmployeeDeleted, Payload: payload})
+	assert.Equal(t, "employee", rType)
+	assert.Equal(t, id.String(), rID)
+}
+
+func TestExtractResource_EmployeeDeleted_EmptyMap(t *testing.T) {
+	payload := map[string]interface{}{"other": "field"}
+
+	rType, rID := extractResource(Event{Type: TypeEmployeeDeleted, Payload: payload})
+	assert.Equal(t, "employee", rType)
+	assert.Equal(t, "", rID)
+}
+
+// ── Leave deleted ─────────────────────────────────────────────────────────────
+
+func TestExtractResource_LeaveDeleted_MapWithID(t *testing.T) {
+	id := uuid.New()
+	payload := map[string]interface{}{"id": id}
+
+	rType, rID := extractResource(Event{Type: TypeLeaveDeleted, Payload: payload})
+	assert.Equal(t, "leave_request", rType)
+	assert.Equal(t, id.String(), rID)
+}
+
+func TestExtractResource_LeaveDeleted_EmptyMap(t *testing.T) {
+	payload := map[string]interface{}{}
+
+	rType, rID := extractResource(Event{Type: TypeLeaveDeleted, Payload: payload})
+	assert.Equal(t, "leave_request", rType)
+	assert.Equal(t, "", rID)
+}
+
+// ── Store events ──────────────────────────────────────────────────────────────
+
+func TestExtractResource_StoreCreated(t *testing.T) {
+	s := &model.Store{}
+	s.ID = uuid.New()
+
+	rType, rID := extractResource(Event{Type: TypeStoreCreated, Payload: s})
+	assert.Equal(t, "store", rType)
+	assert.Equal(t, s.ID.String(), rID)
+}
+
+func TestExtractResource_StoreUpdated(t *testing.T) {
+	s := &model.Store{}
+	s.ID = uuid.New()
+
+	rType, rID := extractResource(Event{Type: TypeStoreUpdated, Payload: s})
+	assert.Equal(t, "store", rType)
+	assert.Equal(t, s.ID.String(), rID)
+}
+
+func TestExtractResource_StoreCreated_WrongPayload(t *testing.T) {
+	// Old store_service bug reproduced: TypeStoreCreated but Employee payload — must not panic.
+	e := &model.Employee{}
+	e.ID = uuid.New()
+
+	rType, rID := extractResource(Event{Type: TypeStoreCreated, Payload: e})
+	assert.Equal(t, "", rType)
+	assert.Equal(t, "", rID)
+}
+
+// ── Schedule generated ────────────────────────────────────────────────────────
+
+func TestExtractResource_ScheduleGenerated(t *testing.T) {
+	payload := map[string]interface{}{
+		"from":  "2026-04-07",
+		"to":    "2026-04-13",
+		"count": 42,
+	}
+
+	rType, rID := extractResource(Event{Type: TypeScheduleGenerated, Payload: payload})
+	assert.Equal(t, "schedule", rType)
+	assert.Equal(t, "", rID, "schedule.generated has no single resource ID")
+}
+
 // ── Unknown / nil payload ─────────────────────────────────────────────────────
 
 func TestExtractResource_UnknownEventType(t *testing.T) {
