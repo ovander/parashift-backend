@@ -31,7 +31,9 @@ type EvaluationInput struct {
 // EvaluatorOutput is what each evaluator returns.
 type EvaluatorOutput struct {
 	Passed  bool
-	Message string // populated on failure only
+	Message string         // English dev-facing message (populated on failure)
+	Key     string         // i18n key for frontend localisation (e.g. "rules.violation.roleMatch")
+	Params  map[string]any // template params for t(key, params) on the frontend
 }
 
 // ─── Interface ────────────────────────────────────────────────────────────────
@@ -112,6 +114,12 @@ func (e *RoleEvaluator) Evaluate(_ context.Context, input EvaluationInput, rawCo
 				"employee %q has job role %q but shift requires %q",
 				input.Employee.Name, input.Employee.JobRole, required,
 			),
+			Key: "rules.violation.roleMatch",
+			Params: map[string]any{
+				"name":     input.Employee.Name,
+				"role":     input.Employee.JobRole,
+				"required": required,
+			},
 		}, nil
 	}
 	return EvaluatorOutput{Passed: true}, nil
@@ -150,6 +158,13 @@ func (e *NoOverlapEvaluator) Evaluate(ctx context.Context, input EvaluationInput
 				input.Shift.StartTime,
 				input.Shift.EndTime,
 			),
+			Key: "rules.violation.noOverlap",
+			Params: map[string]any{
+				"name":  input.Employee.Name,
+				"date":  input.Shift.Date.Format("2006-01-02"),
+				"start": input.Shift.StartTime,
+				"end":   input.Shift.EndTime,
+			},
 		}, nil
 	}
 	return EvaluatorOutput{Passed: true}, nil
@@ -193,6 +208,12 @@ func (e *MaxHoursEvaluator) Evaluate(_ context.Context, input EvaluationInput, r
 				"employee %q would reach %.1f h this week (limit %.0f h)",
 				input.Employee.Name, workedHours, cfg.MaxWeeklyHours,
 			),
+			Key: "rules.violation.maxHours",
+			Params: map[string]any{
+				"name":     input.Employee.Name,
+				"worked":   workedHours,
+				"limit":    cfg.MaxWeeklyHours,
+			},
 		}, nil
 	}
 	return EvaluatorOutput{Passed: true}, nil
@@ -233,6 +254,12 @@ func (e *MinRestEvaluator) Evaluate(_ context.Context, input EvaluationInput, ra
 						"employee %q has only %.1f h rest before proposed shift (minimum %.0f h)",
 						input.Employee.Name, gap.Hours(), cfg.MinRestHours,
 					),
+					Key: "rules.violation.minRest",
+					Params: map[string]any{
+						"name":    input.Employee.Name,
+						"gap":     gap.Hours(),
+						"minimum": cfg.MinRestHours,
+					},
 				}, nil
 			}
 		}
@@ -246,6 +273,12 @@ func (e *MinRestEvaluator) Evaluate(_ context.Context, input EvaluationInput, ra
 						"employee %q would have only %.1f h rest after proposed shift (minimum %.0f h)",
 						input.Employee.Name, gap.Hours(), cfg.MinRestHours,
 					),
+					Key: "rules.violation.minRest",
+					Params: map[string]any{
+						"name":    input.Employee.Name,
+						"gap":     gap.Hours(),
+						"minimum": cfg.MinRestHours,
+					},
 				}, nil
 			}
 		}

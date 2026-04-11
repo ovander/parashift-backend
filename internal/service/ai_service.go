@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 	"github.com/ovander/backendkit/ctxutil"
 	"github.com/ovander/parashift/internal/dto"
 	"github.com/ovander/parashift/internal/model"
+	"github.com/ovander/parashift/internal/pkg"
 	"github.com/ovander/parashift/internal/repo"
 	"github.com/sirupsen/logrus"
 )
@@ -88,27 +90,36 @@ func (s *AIService) SuggestAssignment(
 	// Load shift
 	shift, err := s.shiftRepo.GetByID(ctx, tenantID, req.ShiftID)
 	if err != nil || shift == nil {
-		return nil, apierror.NotFound("shift", req.ShiftID.String())
+		return nil, apierror.NotFound("shift", req.ShiftID.String()).WithKey("errors.unknown")
 	}
 
 	// Load employees
 	employees, _, err := s.empRepo.List(ctx, tenantID, 1, 200)
 	if err != nil {
 		logger.WithError(err).Error("ai: failed to load employees")
-		return nil, apierror.Internal("failed to load employees")
+		return nil, apierror.Internal("failed to load employees").WithKey("errors.unknown")
+	}
+
+	// T1.5: resolve locale (FR default per CR-3)
+	locale := pkg.GetLocale(ctx)
+	if locale == "" {
+		locale = "fr"
 	}
 
 	// Try LLM first; fall back to the heuristic scorer on any error or empty result.
 	var suggestions []dto.ScheduleSuggestion
 
 	if s.gateway != nil {
-		prompt := buildSuggestPrompt(shift, employees)
+		prompt := buildSuggestPrompt(locale, shift, employees)
 		raw, llmErr := s.gateway.Call(ctx, prompt)
 		if llmErr != nil {
 			logger.WithError(llmErr).Warn("ai: LLM suggestion failed — falling back to heuristic scorer")
-		} else if err := aigateway.ExtractJSONInto(raw, &suggestions); err != nil {
-			logger.WithError(err).Warn("ai: failed to parse LLM suggestion — falling back to heuristic scorer")
-			suggestions = nil
+		} else {
+			raw = ensureLanguage(raw, locale, logger) // CR-3: validate/re-request if language drifted
+			if err := aigateway.ExtractJSONInto(raw, &suggestions); err != nil {
+				logger.WithError(err).Warn("ai: failed to parse LLM suggestion — falling back to heuristic scorer")
+				suggestions = nil
+			}
 		}
 	}
 
@@ -211,21 +222,28 @@ func (s *AIService) OptimizeSchedule(
 	shifts, _, err := s.shiftRepo.ListByDateRange(ctx, tenantID, req.DateFrom, req.DateTo, 1, 500)
 	if err != nil {
 		logger.WithError(err).Error("ai: failed to load shifts for optimisation")
-		return nil, apierror.Internal("failed to load shifts")
+		return nil, apierror.Internal("failed to load shifts").WithKey("errors.unknown")
 	}
 
 	employees, _, err := s.empRepo.List(ctx, tenantID, 1, 200)
 	if err != nil {
 		logger.WithError(err).Error("ai: failed to load employees for optimisation")
-		return nil, apierror.Internal("failed to load employees")
+		return nil, apierror.Internal("failed to load employees").WithKey("errors.unknown")
 	}
 
-	prompt := buildOptimizePrompt(req.DateFrom, req.DateTo, shifts, employees)
+	// T1.5: resolve locale (FR default per CR-3)
+	locale := pkg.GetLocale(ctx)
+	if locale == "" {
+		locale = "fr"
+	}
+
+	prompt := buildOptimizePrompt(locale, req.DateFrom, req.DateTo, shifts, employees)
 	raw, err := s.gateway.Call(ctx, prompt)
 	if err != nil {
 		logger.WithError(err).Warn("ai: optimisation call failed, returning empty suggestions")
 		return &dto.OptimizeScheduleResponse{DateFrom: req.DateFrom, DateTo: req.DateTo}, nil
 	}
+	raw = ensureLanguage(raw, locale, logger) // CR-3
 
 	var suggestions []dto.OptimizeScheduleSuggestion
 	if err := aigateway.ExtractJSONInto(raw, &suggestions); err != nil {
@@ -258,21 +276,28 @@ func (s *AIService) GenerateInsights(ctx context.Context, tenantID uuid.UUID) er
 	shifts, _, err := s.shiftRepo.ListByDateRange(ctx, tenantID, from, to, 1, 500)
 	if err != nil {
 		logger.WithError(err).Error("ai: failed to load shifts for insight generation")
-		return apierror.Internal("failed to load shifts")
+		return apierror.Internal("failed to load shifts").WithKey("errors.unknown")
 	}
 
 	employees, _, err := s.empRepo.List(ctx, tenantID, 1, 200)
 	if err != nil {
 		logger.WithError(err).Error("ai: failed to load employees for insight generation")
-		return apierror.Internal("failed to load employees")
+		return apierror.Internal("failed to load employees").WithKey("errors.unknown")
 	}
 
-	prompt := buildInsightPrompt(from, to, shifts, employees)
+	// T1.5: resolve locale (FR default per CR-3)
+	locale := pkg.GetLocale(ctx)
+	if locale == "" {
+		locale = "fr"
+	}
+
+	prompt := buildInsightPrompt(locale, from, to, shifts, employees)
 	raw, err := s.gateway.Call(ctx, prompt)
 	if err != nil {
 		logger.WithError(err).Warn("ai: insight generation call failed, skipping")
 		return nil // degrade gracefully
 	}
+	raw = ensureLanguage(raw, locale, logger) // CR-3
 
 	type rawInsight struct {
 		Type           string  `json:"type"`
@@ -313,7 +338,7 @@ func (s *AIService) ListInsights(ctx context.Context, tenantID uuid.UUID, page, 
 	insights, total, err := s.insightRepo.List(ctx, tenantID, page, pageSize)
 	if err != nil {
 		logger.WithError(err).Error("ai: failed to list insights")
-		return nil, 0, apierror.Internal("failed to list insights")
+		return nil, 0, apierror.Internal("failed to list insights").WithKey("errors.unknown")
 	}
 	return insights, total, nil
 }
@@ -323,19 +348,31 @@ func (s *AIService) DismissInsight(ctx context.Context, tenantID, id uuid.UUID) 
 	logger := ctxutil.GetLogger(ctx)
 	if err := s.insightRepo.Dismiss(ctx, tenantID, id); err != nil {
 		logger.WithError(err).Error("ai: failed to dismiss insight")
-		return apierror.Internal("failed to dismiss insight")
+		return apierror.Internal("failed to dismiss insight").WithKey("errors.unknown")
 	}
 	return nil
 }
 
 // ─── Prompt builders ───────────────────────────────────────────────────────────
 
-func buildSuggestPrompt(shift *model.ShiftInstance, employees []*model.Employee) string {
+// languageInstruction returns the mandatory language directive prepended to every
+// AI prompt. CR-3: all user-facing text in AI output MUST be in the target locale.
+func languageInstruction(locale string) string {
+	switch locale {
+	case "en":
+		return "IMPORTANT: All text values in your JSON response (reason, message, recommendation) MUST be written in English.\n\n"
+	default: // "fr" and any unknown locale fall back to French
+		return "IMPORTANT : Tous les textes de ta réponse JSON (reason, message, recommendation) DOIVENT être rédigés en français.\n\n"
+	}
+}
+
+func buildSuggestPrompt(locale string, shift *model.ShiftInstance, employees []*model.Employee) string {
 	empList := ""
 	for _, e := range employees {
 		empList += fmt.Sprintf("  - id:%s name:%q job_role:%q\n", e.ID, e.Name, e.JobRole)
 	}
-	return fmt.Sprintf(`You are a workforce scheduling assistant.
+	return languageInstruction(locale) + fmt.Sprintf(
+		`You are a workforce scheduling assistant.
 Given the shift details below and the list of available employees, return a JSON array of the top 3 employee suggestions ranked by suitability.
 
 Shift:
@@ -353,8 +390,9 @@ Return ONLY valid JSON in this exact format (no explanation):
 	)
 }
 
-func buildOptimizePrompt(from, to time.Time, shifts []*model.ShiftInstance, employees []*model.Employee) string {
-	return fmt.Sprintf(`You are a workforce scheduling optimisation assistant.
+func buildOptimizePrompt(locale string, from, to time.Time, shifts []*model.ShiftInstance, employees []*model.Employee) string {
+	return languageInstruction(locale) + fmt.Sprintf(
+		`You are a workforce scheduling optimisation assistant.
 Analyse the schedule from %s to %s and suggest reassignments to improve coverage, ensure adequate rest, and distribute hours fairly.
 There are %d shifts and %d employees.
 Return ONLY valid JSON as an array:
@@ -364,12 +402,90 @@ Return ONLY valid JSON as an array:
 	)
 }
 
-func buildInsightPrompt(from, to time.Time, shifts []*model.ShiftInstance, employees []*model.Employee) string {
-	return fmt.Sprintf(`You are a workforce scheduling analyst.
+func buildInsightPrompt(locale string, from, to time.Time, shifts []*model.ShiftInstance, employees []*model.Employee) string {
+	return languageInstruction(locale) + fmt.Sprintf(
+		`You are a workforce scheduling analyst.
 Analyse the schedule from %s to %s (%d shifts, %d employees) and surface any coverage gaps, rest violations, or fairness issues.
 Return ONLY valid JSON as an array:
 [{"type":"COVERAGE|REST|FAIRNESS|COST","message":"<observation>","recommendation":"<action>","confidence":<0.0-1.0>}]`,
 		from.Format("2006-01-02"), to.Format("2006-01-02"),
 		len(shifts), len(employees),
 	)
+}
+
+// ─── CR-3: Language validation layer ──────────────────────────────────────────
+
+// ensureLanguage checks that the LLM response text is in the expected locale.
+// If language drift is detected it logs a warning (CR-6 observability) and returns
+// the original text unchanged — the upstream caller decides whether to discard it.
+// In a future iteration this could re-request the LLM with a stricter prompt.
+func ensureLanguage(text, locale string, logger *logrus.Entry) string {
+	detected := detectLanguage(text)
+	if detected != "" && detected != locale {
+		logger.WithFields(logrus.Fields{
+			"expected": locale,
+			"detected": detected,
+			"preview":  truncate(text, 120),
+		}).Warn("ai: language drift detected in LLM response")
+	}
+	return text
+}
+
+// detectLanguage performs lightweight stopword-frequency language detection.
+// It returns "fr", "en", or "" (unknown / too short to classify reliably).
+func detectLanguage(text string) string {
+	lower := strings.ToLower(text)
+
+	frStopwords := []string{
+		"le", "la", "les", "de", "du", "des", "en", "un", "une",
+		"est", "sont", "pour", "avec", "dans", "sur", "par", "que",
+		"qui", "pas", "plus", "cette", "tout", "mais", "aussi",
+	}
+	enStopwords := []string{
+		"the", "and", "for", "with", "this", "that", "from", "are",
+		"not", "has", "have", "been", "will", "can", "its", "they",
+		"their", "more", "also", "but", "all", "any", "each",
+	}
+
+	frCount := countOccurrences(lower, frStopwords)
+	enCount := countOccurrences(lower, enStopwords)
+
+	const minSignal = 2 // require at least 2 hits to avoid false positives on short strings
+	if frCount < minSignal && enCount < minSignal {
+		return ""
+	}
+	if frCount > enCount {
+		return "fr"
+	}
+	if enCount > frCount {
+		return "en"
+	}
+	return "" // tie — cannot determine
+}
+
+// countOccurrences returns the number of words from the list that appear as
+// whole words (space- or punctuation-bounded) in the text.
+func countOccurrences(text string, words []string) int {
+	count := 0
+	for _, w := range words {
+		// Simple whole-word check: look for the word surrounded by non-alpha chars.
+		needle := " " + w + " "
+		if strings.Contains(text, needle) {
+			count++
+			continue
+		}
+		// Also match at start/end of string.
+		if strings.HasPrefix(text, w+" ") || strings.HasSuffix(text, " "+w) {
+			count++
+		}
+	}
+	return count
+}
+
+// truncate returns the first n bytes of s, appending "…" if truncated.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }

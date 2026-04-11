@@ -48,10 +48,10 @@ func (s *EmployeeService) GetByID(ctx context.Context, tenantID, id uuid.UUID) (
 	emp, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get employee")
-		return nil, apierror.Internal("failed to get employee")
+		return nil, apierror.Internal("failed to get employee").WithKey("errors.unknown")
 	}
 	if emp == nil {
-		return nil, apierror.NotFound("employee", id.String())
+		return nil, apierror.NotFound("employee", id.String()).WithKey("errors.unknown")
 	}
 	return emp, nil
 }
@@ -62,10 +62,10 @@ func (s *EmployeeService) GetByAuthID(ctx context.Context, authID string) (*mode
 	emp, err := s.repo.GetByAuthID(ctx, authID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get employee by auth id")
-		return nil, apierror.Internal("failed to get employee")
+		return nil, apierror.Internal("failed to get employee").WithKey("errors.unknown")
 	}
 	if emp == nil {
-		return nil, apierror.NotFound("employee", authID)
+		return nil, apierror.NotFound("employee", authID).WithKey("errors.unknown")
 	}
 	return emp, nil
 }
@@ -82,7 +82,7 @@ func (s *EmployeeService) ListByStore(ctx context.Context, tenantID uuid.UUID) (
 		batch, _, err := s.repo.List(ctx, tenantID, page, pageSize)
 		if err != nil {
 			logger.WithError(err).Error("failed to list employees")
-			return nil, apierror.Internal("failed to list employees")
+			return nil, apierror.Internal("failed to list employees").WithKey("errors.unknown")
 		}
 		employees = append(employees, batch...)
 		if len(batch) < pageSize {
@@ -100,7 +100,7 @@ func (s *EmployeeService) List(ctx context.Context, tenantID uuid.UUID, page, pa
 	emps, total, err := s.repo.List(ctx, tenantID, page, pageSize)
 	if err != nil {
 		logger.WithError(err).Error("failed to list employees")
-		return nil, 0, apierror.Internal("failed to list employees")
+		return nil, 0, apierror.Internal("failed to list employees").WithKey("errors.unknown")
 	}
 	return emps, total, nil
 }
@@ -117,15 +117,15 @@ func (s *EmployeeService) Create(ctx context.Context, tenantID uuid.UUID, req dt
 	logger := ctxutil.GetLogger(ctx)
 
 	if req.Name == "" {
-		return nil, apierror.BadRequest("name is required")
+		return nil, apierror.BadRequest("name is required").WithKey("errors.invalidInput")
 	}
 	if req.Position != "manager" && req.Position != "employee" {
-		return nil, apierror.BadRequest("position must be 'manager' or 'employee'")
+		return nil, apierror.BadRequest("position must be 'manager' or 'employee'").WithKey("errors.invalidInput")
 	}
 	// job_role is required for employees but optional for managers (who manage
 	// the store rather than filling shift slots requiring a specific role).
 	if req.JobRole == "" && req.Position == "employee" {
-		return nil, apierror.BadRequest("job_role is required for employees")
+		return nil, apierror.BadRequest("job_role is required for employees").WithKey("errors.invalidInput")
 	}
 
 	emp := &model.Employee{
@@ -188,7 +188,7 @@ func (s *EmployeeService) Create(ctx context.Context, tenantID uuid.UUID, req dt
 
 	if err := s.repo.Create(ctx, emp); err != nil {
 		logger.WithError(err).Error("failed to create employee")
-		return nil, apierror.Internal("failed to create employee")
+		return nil, apierror.Internal("failed to create employee").WithKey("errors.unknown")
 	}
 
 	// Publish event
@@ -208,16 +208,16 @@ func (s *EmployeeService) ClaimByToken(ctx context.Context, token, sub string) (
 	logger := ctxutil.GetLogger(ctx)
 
 	if token == "" || sub == "" {
-		return nil, apierror.BadRequest("token and sub are required")
+		return nil, apierror.BadRequest("token and sub are required").WithKey("errors.invalidInput")
 	}
 
 	emp, err := s.repo.GetByClaimToken(ctx, token)
 	if err != nil {
 		logger.WithError(err).Error("failed to look up claim token")
-		return nil, apierror.Internal("failed to process claim")
+		return nil, apierror.Internal("failed to process claim").WithKey("errors.unknown")
 	}
 	if emp == nil {
-		return nil, apierror.NotFound("invite", token)
+		return nil, apierror.NotFound("invite", token).WithKey("errors.unknown")
 	}
 
 	// Bind the sub and clear the token.
@@ -227,7 +227,7 @@ func (s *EmployeeService) ClaimByToken(ctx context.Context, token, sub string) (
 
 	if err := s.repo.Update(ctx, emp); err != nil {
 		logger.WithError(err).Error("failed to claim employee record")
-		return nil, apierror.Internal("failed to claim invite")
+		return nil, apierror.Internal("failed to claim invite").WithKey("errors.unknown")
 	}
 
 	return emp, nil
@@ -240,10 +240,10 @@ func (s *EmployeeService) Update(ctx context.Context, tenantID, id uuid.UUID, re
 	emp, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get employee for update")
-		return nil, apierror.Internal("failed to get employee")
+		return nil, apierror.Internal("failed to get employee").WithKey("errors.unknown")
 	}
 	if emp == nil {
-		return nil, apierror.NotFound("employee", id.String())
+		return nil, apierror.NotFound("employee", id.String()).WithKey("errors.unknown")
 	}
 
 	if req.Name != nil {
@@ -251,21 +251,27 @@ func (s *EmployeeService) Update(ctx context.Context, tenantID, id uuid.UUID, re
 	}
 	if req.Position != nil {
 		if *req.Position != "manager" && *req.Position != "employee" {
-			return nil, apierror.BadRequest("position must be 'manager' or 'employee'")
+			return nil, apierror.BadRequest("position must be 'manager' or 'employee'").WithKey("errors.invalidInput")
 		}
 		emp.Position = *req.Position
 	}
 	if req.JobRole != nil {
 		if *req.JobRole == "" {
-			return nil, apierror.BadRequest("job_role cannot be empty")
+			return nil, apierror.BadRequest("job_role cannot be empty").WithKey("errors.invalidInput")
 		}
 		emp.JobRole = *req.JobRole
+	}
+	if req.Locale != nil {
+		if *req.Locale != "fr" && *req.Locale != "en" {
+			return nil, apierror.BadRequest("locale must be 'fr' or 'en'").WithKey("errors.invalidInput")
+		}
+		emp.Locale = *req.Locale
 	}
 
 	emp.UpdatedAt = time.Now()
 	if err := s.repo.Update(ctx, emp); err != nil {
 		logger.WithError(err).Error("failed to update employee")
-		return nil, apierror.Internal("failed to update employee")
+		return nil, apierror.Internal("failed to update employee").WithKey("errors.unknown")
 	}
 
 	// Publish event
@@ -285,8 +291,17 @@ func (s *EmployeeService) Delete(ctx context.Context, tenantID, id uuid.UUID) er
 
 	if err := s.repo.Delete(ctx, tenantID, id); err != nil {
 		logger.WithError(err).Error("failed to delete employee")
-		return apierror.Internal("failed to delete employee")
+		return apierror.Internal("failed to delete employee").WithKey("errors.unknown")
 	}
+
+	// Publish event
+	s.emitter.Publish(event.Event{
+		Type:     event.TypeEmployeeDeleted,
+		TenantID: tenantID,
+		UserID:   ctxutil.GetUserID(ctx),
+		Payload:  map[string]interface{}{"id": id},
+	})
+
 	return nil
 }
 
@@ -298,7 +313,7 @@ func (s *EmployeeService) ListAll(ctx context.Context, filter repo.EmployeeFilte
 	emps, total, err := s.repo.ListAll(ctx, filter, page, pageSize)
 	if err != nil {
 		logger.WithError(err).Error("failed to list all employees")
-		return nil, 0, apierror.Internal("failed to list employees")
+		return nil, 0, apierror.Internal("failed to list employees").WithKey("errors.unknown")
 	}
 	return emps, total, nil
 }
@@ -309,10 +324,10 @@ func (s *EmployeeService) GetByIDGlobal(ctx context.Context, id uuid.UUID) (*mod
 	emp, err := s.repo.GetByIDGlobal(ctx, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get employee globally")
-		return nil, apierror.Internal("failed to get employee")
+		return nil, apierror.Internal("failed to get employee").WithKey("errors.unknown")
 	}
 	if emp == nil {
-		return nil, apierror.NotFound("employee", id.String())
+		return nil, apierror.NotFound("employee", id.String()).WithKey("errors.unknown")
 	}
 	return emp, nil
 }
@@ -324,10 +339,10 @@ func (s *EmployeeService) UpdateGlobal(ctx context.Context, id uuid.UUID, req dt
 	emp, err := s.repo.GetByIDGlobal(ctx, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get employee for global update")
-		return nil, apierror.Internal("failed to get employee")
+		return nil, apierror.Internal("failed to get employee").WithKey("errors.unknown")
 	}
 	if emp == nil {
-		return nil, apierror.NotFound("employee", id.String())
+		return nil, apierror.NotFound("employee", id.String()).WithKey("errors.unknown")
 	}
 
 	if req.Name != nil {
@@ -346,7 +361,7 @@ func (s *EmployeeService) UpdateGlobal(ctx context.Context, id uuid.UUID, req dt
 
 	if err := s.repo.Update(ctx, emp); err != nil {
 		logger.WithError(err).Error("failed to update employee globally")
-		return nil, apierror.Internal("failed to update employee")
+		return nil, apierror.Internal("failed to update employee").WithKey("errors.unknown")
 	}
 
 	s.emitter.Publish(event.Event{
@@ -362,10 +377,27 @@ func (s *EmployeeService) UpdateGlobal(ctx context.Context, id uuid.UUID, req dt
 // DeleteGlobal soft-deletes any employee regardless of tenant (admin-only).
 func (s *EmployeeService) DeleteGlobal(ctx context.Context, id uuid.UUID) error {
 	logger := ctxutil.GetLogger(ctx)
+
+	// Fetch employee before delete so we can capture the correct tenant ID for the audit event.
+	emp, _ := s.repo.GetByIDGlobal(ctx, id)
+
 	if err := s.repo.DeleteGlobal(ctx, id); err != nil {
 		logger.WithError(err).Error("failed to delete employee globally")
-		return apierror.Internal("failed to delete employee")
+		return apierror.Internal("failed to delete employee").WithKey("errors.unknown")
 	}
+
+	// Publish event (best-effort: if emp was nil, TenantID will be uuid.Nil)
+	tenantID := uuid.Nil
+	if emp != nil {
+		tenantID = emp.TenantID
+	}
+	s.emitter.Publish(event.Event{
+		Type:     event.TypeEmployeeDeleted,
+		TenantID: tenantID,
+		UserID:   ctxutil.GetUserID(ctx),
+		Payload:  map[string]interface{}{"id": id},
+	})
+
 	return nil
 }
 
@@ -388,19 +420,19 @@ func (s *EmployeeService) ResendInvite(ctx context.Context, id uuid.UUID) (*Rese
 	logger := ctxutil.GetLogger(ctx)
 
 	if s.socrate == nil {
-		return nil, apierror.BadRequest("invite email service is not configured")
+		return nil, apierror.BadRequest("invite email service is not configured").WithKey("errors.emailServiceUnavailable")
 	}
 
 	emp, err := s.repo.GetByIDGlobal(ctx, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get employee for invite resend")
-		return nil, apierror.Internal("failed to get employee")
+		return nil, apierror.Internal("failed to get employee").WithKey("errors.unknown")
 	}
 	if emp == nil {
-		return nil, apierror.NotFound("employee", id.String())
+		return nil, apierror.NotFound("employee", id.String()).WithKey("errors.unknown")
 	}
 	if emp.Email == "" {
-		return nil, apierror.BadRequest("employee has no email address on record")
+		return nil, apierror.BadRequest("employee has no email address on record").WithKey("errors.noEmailAddress")
 	}
 
 	// ── Path A: employee is not yet in Socrate ────────────────────────────────
@@ -453,10 +485,10 @@ func (s *EmployeeService) ResendInvite(ctx context.Context, id uuid.UUID) (*Rese
 	// ── Path B: employee is already in Socrate — send a magic link ────────────
 	if _, err := s.socrate.SendMagicLink(ctx, emp.Email); err != nil {
 		if errors.Is(err, socrate.ErrMagicLinkRateLimited) {
-			return nil, apierror.BadRequest("invite email rate limit exceeded, please try again later")
+			return nil, apierror.BadRequest("invite email rate limit exceeded, please try again later").WithKey("errors.rateLimited")
 		}
 		logger.WithError(err).Error("failed to send magic link")
-		return nil, apierror.Internal("failed to resend invite")
+		return nil, apierror.Internal("failed to resend invite").WithKey("errors.unknown")
 	}
 
 	logger.WithField("employee_id", id).Info("resend invite: magic link sent")

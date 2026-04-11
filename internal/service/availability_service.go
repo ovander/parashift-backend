@@ -42,17 +42,17 @@ func (s *AvailabilityService) SetAvailability(ctx context.Context, tenantID, emp
 	emp, err := s.empRepo.GetByID(ctx, tenantID, employeeID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get employee")
-		return nil, apierror.Internal("failed to get employee")
+		return nil, apierror.Internal("failed to get employee").WithKey("errors.unknown")
 	}
 	if emp == nil {
-		return nil, apierror.NotFound("employee", employeeID.String())
+		return nil, apierror.NotFound("employee", employeeID.String()).WithKey("errors.unknown")
 	}
 
 	// Validate time ranges
 	var timeRanges []model.TimeRange
 	for _, tr := range req.TimeRanges {
 		if tr.Start == "" || tr.End == "" {
-			return nil, apierror.BadRequest("time range start and end are required")
+			return nil, apierror.BadRequest("time range start and end are required").WithKey("errors.invalidInput")
 		}
 		timeRanges = append(timeRanges, model.TimeRange{
 			Start: tr.Start,
@@ -64,7 +64,7 @@ func (s *AvailabilityService) SetAvailability(ctx context.Context, tenantID, emp
 	timeRangesJSON, err := json.Marshal(timeRanges)
 	if err != nil {
 		logger.WithError(err).Error("failed to marshal time ranges")
-		return nil, apierror.Internal("failed to set availability")
+		return nil, apierror.Internal("failed to set availability").WithKey("errors.unknown")
 	}
 
 	// Dereference optional Note pointer
@@ -88,7 +88,7 @@ func (s *AvailabilityService) SetAvailability(ctx context.Context, tenantID, emp
 
 	if err := s.repo.Upsert(ctx, availability); err != nil {
 		logger.WithError(err).Error("failed to upsert availability")
-		return nil, apierror.Internal("failed to set availability")
+		return nil, apierror.Internal("failed to set availability").WithKey("errors.unknown")
 	}
 
 	return availability, nil
@@ -101,11 +101,11 @@ func (s *AvailabilityService) GetAvailability(ctx context.Context, tenantID, emp
 	availability, err := s.repo.GetByEmployeeDate(ctx, tenantID, employeeID, date)
 	if err != nil {
 		logger.WithError(err).Error("failed to get availability")
-		return nil, apierror.Internal("failed to get availability")
+		return nil, apierror.Internal("failed to get availability").WithKey("errors.unknown")
 	}
 
 	if availability == nil {
-		return nil, apierror.NotFound("availability", date.Format("2006-01-02"))
+		return nil, apierror.NotFound("availability", date.Format("2006-01-02")).WithKey("errors.unknown")
 	}
 
 	return availability, nil
@@ -118,7 +118,7 @@ func (s *AvailabilityService) ListAvailability(ctx context.Context, tenantID, em
 	availabilities, err := s.repo.ListByEmployee(ctx, tenantID, employeeID, from, to)
 	if err != nil {
 		logger.WithError(err).Error("failed to list availability")
-		return nil, apierror.Internal("failed to list availability")
+		return nil, apierror.Internal("failed to list availability").WithKey("errors.unknown")
 	}
 
 	return availabilities, nil

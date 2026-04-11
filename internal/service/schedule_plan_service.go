@@ -50,7 +50,7 @@ func (s *SchedulePlanService) GetOrCreate(ctx context.Context, tenantID uuid.UUI
 	existing, err := s.planRepo.GetByWeekStart(ctx, tenantID, weekStart)
 	if err != nil {
 		logger.WithError(err).Error("failed to check for existing plan")
-		return nil, apierror.Internal("failed to check for existing plan")
+		return nil, apierror.Internal("failed to check for existing plan").WithKey("errors.unknown")
 	}
 	if existing != nil {
 		logger.WithField("plan_id", existing.ID).Debug("found existing plan")
@@ -76,7 +76,7 @@ func (s *SchedulePlanService) GetOrCreate(ctx context.Context, tenantID uuid.UUI
 
 	if err := s.planRepo.Create(ctx, plan); err != nil {
 		logger.WithError(err).Error("failed to create new plan")
-		return nil, apierror.Internal("failed to create plan")
+		return nil, apierror.Internal("failed to create plan").WithKey("errors.unknown")
 	}
 
 	logger.WithField("plan_id", plan.ID).Info("schedule plan created (DRAFT)")
@@ -95,11 +95,11 @@ func (s *SchedulePlanService) GetByID(ctx context.Context, tenantID, planID uuid
 	plan, err := s.planRepo.GetByID(ctx, tenantID, planID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get plan")
-		return nil, apierror.Internal("failed to get plan")
+		return nil, apierror.Internal("failed to get plan").WithKey("errors.unknown")
 	}
 	if plan == nil {
 		logger.WithField("plan_id", planID).Warn("plan not found")
-		return nil, apierror.NotFound("plan", planID.String())
+		return nil, apierror.NotFound("plan", planID.String()).WithKey("errors.unknown")
 	}
 	return plan, nil
 }
@@ -117,11 +117,11 @@ func (s *SchedulePlanService) Publish(ctx context.Context, tenantID, planID uuid
 	plan, err := s.planRepo.GetByID(ctx, tenantID, planID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get plan")
-		return nil, apierror.Internal("failed to get plan")
+		return nil, apierror.Internal("failed to get plan").WithKey("errors.unknown")
 	}
 	if plan == nil {
 		logger.WithField("plan_id", planID).Warn("plan not found for publish")
-		return nil, apierror.NotFound("plan", planID.String())
+		return nil, apierror.NotFound("plan", planID.String()).WithKey("errors.unknown")
 	}
 
 	logger.WithFields(logrus.Fields{
@@ -131,7 +131,7 @@ func (s *SchedulePlanService) Publish(ctx context.Context, tenantID, planID uuid
 
 	if plan.State != model.PlanStateDraft {
 		logger.WithField("current_state", plan.State).Warn("publish rejected: plan not in DRAFT state")
-		return nil, apierror.ValidationError("plan_already_published", "plan must be in DRAFT state to publish")
+		return nil, apierror.ValidationError("plan_already_published", "plan must be in DRAFT state to publish").WithKey("errors.conflict")
 	}
 
 	// Get all shifts for this week to count them and calculate coverage
@@ -139,7 +139,7 @@ func (s *SchedulePlanService) Publish(ctx context.Context, tenantID, planID uuid
 	shifts, _, err := s.shiftRepo.ListByDateRange(ctx, tenantID, plan.WeekStart, plan.WeekStart.AddDate(0, 0, 6), 1, 10000)
 	if err != nil {
 		logger.WithError(err).Error("failed to list shifts for publish")
-		return nil, apierror.Internal("failed to list shifts")
+		return nil, apierror.Internal("failed to list shifts").WithKey("errors.unknown")
 	}
 
 	logger.WithField("shift_count", len(shifts)).Debug("shifts fetched for publish snapshot")
@@ -147,7 +147,7 @@ func (s *SchedulePlanService) Publish(ctx context.Context, tenantID, planID uuid
 	// Publish all shifts for this week
 	if _, err := s.shiftRepo.SetStatusByDateRange(ctx, tenantID, plan.WeekStart, plan.WeekStart.AddDate(0, 0, 6), model.ShiftStatusPublished); err != nil {
 		logger.WithError(err).Error("failed to publish shifts")
-		return nil, apierror.Internal("failed to publish shifts")
+		return nil, apierror.Internal("failed to publish shifts").WithKey("errors.unknown")
 	}
 
 	// Create snapshot
@@ -180,7 +180,7 @@ func (s *SchedulePlanService) Publish(ctx context.Context, tenantID, planID uuid
 
 	if err := s.planRepo.Update(ctx, plan); err != nil {
 		logger.WithError(err).Error("failed to update plan after publish")
-		return nil, apierror.Internal("failed to update plan")
+		return nil, apierror.Internal("failed to update plan").WithKey("errors.unknown")
 	}
 
 	logger.WithFields(logrus.Fields{
@@ -217,17 +217,17 @@ func (s *SchedulePlanService) RecordOverride(ctx context.Context, tenantID, plan
 	plan, err := s.planRepo.GetByID(ctx, tenantID, planID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get plan")
-		return apierror.Internal("failed to get plan")
+		return apierror.Internal("failed to get plan").WithKey("errors.unknown")
 	}
 	if plan == nil {
 		logger.WithField("plan_id", planID).Warn("plan not found for override")
-		return apierror.NotFound("plan", planID.String())
+		return apierror.NotFound("plan", planID.String()).WithKey("errors.unknown")
 	}
 
 	// Only PUBLISHED or LIVE states allow overrides
 	if plan.State != model.PlanStatePublished && plan.State != model.PlanStateLive {
 		logger.WithField("current_state", plan.State).Warn("override rejected: invalid plan state")
-		return apierror.ValidationError("invalid_state", "overrides only allowed in PUBLISHED or LIVE state")
+		return apierror.ValidationError("invalid_state", "overrides only allowed in PUBLISHED or LIVE state").WithKey("errors.conflict")
 	}
 
 	entry.Timestamp = time.Now()
@@ -246,7 +246,7 @@ func (s *SchedulePlanService) RecordOverride(ctx context.Context, tenantID, plan
 
 	if err := s.planRepo.Update(ctx, plan); err != nil {
 		logger.WithError(err).Error("failed to update plan override log")
-		return apierror.Internal("failed to update plan")
+		return apierror.Internal("failed to update plan").WithKey("errors.unknown")
 	}
 
 	logger.WithFields(logrus.Fields{
@@ -279,11 +279,11 @@ func (s *SchedulePlanService) GetHistory(ctx context.Context, tenantID, planID u
 	plan, err := s.planRepo.GetByID(ctx, tenantID, planID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get plan")
-		return nil, apierror.Internal("failed to get plan")
+		return nil, apierror.Internal("failed to get plan").WithKey("errors.unknown")
 	}
 	if plan == nil {
 		logger.WithField("plan_id", planID).Warn("plan not found for history")
-		return nil, apierror.NotFound("plan", planID.String())
+		return nil, apierror.NotFound("plan", planID.String()).WithKey("errors.unknown")
 	}
 
 	var snapshots []model.PlanSnapshot
@@ -311,11 +311,11 @@ func (s *SchedulePlanService) Rollback(ctx context.Context, tenantID, planID uui
 	plan, err := s.planRepo.GetByID(ctx, tenantID, planID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get plan")
-		return nil, apierror.Internal("failed to get plan")
+		return nil, apierror.Internal("failed to get plan").WithKey("errors.unknown")
 	}
 	if plan == nil {
 		logger.WithField("plan_id", planID).Warn("plan not found for rollback")
-		return nil, apierror.NotFound("plan", planID.String())
+		return nil, apierror.NotFound("plan", planID.String()).WithKey("errors.unknown")
 	}
 
 	logger.WithFields(logrus.Fields{
@@ -325,13 +325,13 @@ func (s *SchedulePlanService) Rollback(ctx context.Context, tenantID, planID uui
 
 	if plan.State == model.PlanStateArchived {
 		logger.WithField("plan_id", planID).Warn("rollback rejected: plan is archived")
-		return nil, apierror.ValidationError("archived", "cannot rollback archived plan")
+		return nil, apierror.ValidationError("archived", "cannot rollback archived plan").WithKey("errors.conflict")
 	}
 
 	// Revert shifts back to DRAFT
 	if _, err := s.shiftRepo.SetStatusByDateRange(ctx, tenantID, plan.WeekStart, plan.WeekStart.AddDate(0, 0, 6), model.ShiftStatusDraft); err != nil {
 		logger.WithError(err).Error("failed to revert shifts to draft")
-		return nil, apierror.Internal("failed to revert shifts")
+		return nil, apierror.Internal("failed to revert shifts").WithKey("errors.unknown")
 	}
 
 	// Revert to DRAFT
@@ -340,7 +340,7 @@ func (s *SchedulePlanService) Rollback(ctx context.Context, tenantID, planID uui
 
 	if err := s.planRepo.Update(ctx, plan); err != nil {
 		logger.WithError(err).Error("failed to update plan after rollback")
-		return nil, apierror.Internal("failed to update plan")
+		return nil, apierror.Internal("failed to update plan").WithKey("errors.unknown")
 	}
 
 	logger.WithFields(logrus.Fields{

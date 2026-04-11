@@ -58,7 +58,7 @@ func (s *PlanningModelMetricService) RecordPublish(ctx context.Context, tenantID
 
 	if err := s.metricRepo.Upsert(ctx, metric); err != nil {
 		logger.WithError(err).Error("failed to upsert publish metric")
-		return apierror.Internal("failed to record metric")
+		return apierror.Internal("failed to record metric").WithKey("errors.unknown")
 	}
 
 	logger.WithFields(logrus.Fields{
@@ -83,7 +83,7 @@ func (s *PlanningModelMetricService) IncrementAdjustment(ctx context.Context, te
 	metrics, err := s.metricRepo.ListByScheme(ctx, tenantID, scheme, 1000)
 	if err != nil {
 		logger.WithError(err).Error("failed to list metrics for adjustment increment")
-		return apierror.Internal("failed to update metric")
+		return apierror.Internal("failed to update metric").WithKey("errors.unknown")
 	}
 
 	var metric *model.PlanningModelMetric
@@ -116,7 +116,7 @@ func (s *PlanningModelMetricService) IncrementAdjustment(ctx context.Context, te
 
 	if err := s.metricRepo.Upsert(ctx, metric); err != nil {
 		logger.WithError(err).Error("failed to upsert adjustment metric")
-		return apierror.Internal("failed to update metric")
+		return apierror.Internal("failed to update metric").WithKey("errors.unknown")
 	}
 
 	logger.WithFields(logrus.Fields{
@@ -141,7 +141,7 @@ func (s *PlanningModelMetricService) GetMetricsForScheme(ctx context.Context, te
 	metrics, err := s.metricRepo.ListByScheme(ctx, tenantID, scheme, limitWeeks)
 	if err != nil {
 		logger.WithError(err).Error("failed to list metrics")
-		return nil, apierror.Internal("failed to list metrics")
+		return nil, apierror.Internal("failed to list metrics").WithKey("errors.unknown")
 	}
 
 	// Convert to DTOs

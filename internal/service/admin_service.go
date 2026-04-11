@@ -44,22 +44,22 @@ func (s *AdminService) GetStats(ctx context.Context) (*AdminStats, error) {
 	if err := s.db.WithContext(ctx).Table("stores").
 		Where("deleted_at IS NULL").Count(&stats.TotalStores).Error; err != nil {
 		s.logger.WithError(err).Error("failed to count stores")
-		return nil, apierror.Internal("failed to get stats")
+		return nil, apierror.Internal("failed to get stats").WithKey("errors.unknown")
 	}
 	if err := s.db.WithContext(ctx).Table("employees").
 		Where("deleted_at IS NULL").Count(&stats.TotalEmployees).Error; err != nil {
 		s.logger.WithError(err).Error("failed to count employees")
-		return nil, apierror.Internal("failed to get stats")
+		return nil, apierror.Internal("failed to get stats").WithKey("errors.unknown")
 	}
 	if err := s.db.WithContext(ctx).Table("leave_requests").
 		Where("status = ? AND deleted_at IS NULL", "pending").Count(&stats.PendingLeaveRequests).Error; err != nil {
 		s.logger.WithError(err).Error("failed to count pending leave requests")
-		return nil, apierror.Internal("failed to get stats")
+		return nil, apierror.Internal("failed to get stats").WithKey("errors.unknown")
 	}
 	if err := s.db.WithContext(ctx).Table("swap_requests").
 		Where("status = ? AND deleted_at IS NULL", "pending").Count(&stats.PendingSwapRequests).Error; err != nil {
 		s.logger.WithError(err).Error("failed to count pending swap requests")
-		return nil, apierror.Internal("failed to get stats")
+		return nil, apierror.Internal("failed to get stats").WithKey("errors.unknown")
 	}
 
 	return &stats, nil
@@ -97,7 +97,7 @@ func (s *AdminService) ListAuditLogs(ctx context.Context, tenantID uuid.UUID, fi
 	}, page, pageSize)
 	if err != nil {
 		logger.WithError(err).Error("failed to list audit logs")
-		return nil, 0, apierror.Internal("failed to list audit logs")
+		return nil, 0, apierror.Internal("failed to list audit logs").WithKey("errors.unknown")
 	}
 
 	actorNames := s.resolveActorNames(ctx, logs)

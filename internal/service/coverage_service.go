@@ -82,7 +82,7 @@ func (s *CoverageService) ListRequirements(ctx context.Context, tenantID uuid.UU
 	reqs, err := s.coverageReqRepo.List(ctx, tenantID)
 	if err != nil {
 		logger.WithError(err).Error("failed to list coverage requirements")
-		return nil, apierror.Internal("failed to list requirements")
+		return nil, apierror.Internal("failed to list requirements").WithKey("errors.unknown")
 	}
 	return reqs, nil
 }
@@ -92,13 +92,13 @@ func (s *CoverageService) CreateRequirement(ctx context.Context, tenantID uuid.U
 	logger := ctxutil.GetLogger(ctx)
 
 	if req.DayOfWeek < 0 || req.DayOfWeek > 6 {
-		return nil, apierror.BadRequest("day_of_week must be 0-6")
+		return nil, apierror.BadRequest("day_of_week must be 0-6").WithKey("errors.invalidInput")
 	}
 	if req.StartTime == "" || req.EndTime == "" {
-		return nil, apierror.BadRequest("start_time and end_time are required")
+		return nil, apierror.BadRequest("start_time and end_time are required").WithKey("errors.missingParams")
 	}
 	if req.MinStaff < 1 {
-		return nil, apierror.BadRequest("min_staff must be at least 1")
+		return nil, apierror.BadRequest("min_staff must be at least 1").WithKey("errors.invalidInput")
 	}
 
 	cr := &model.CoverageRequirement{
@@ -117,7 +117,7 @@ func (s *CoverageService) CreateRequirement(ctx context.Context, tenantID uuid.U
 
 	if err := s.coverageReqRepo.Create(ctx, cr); err != nil {
 		logger.WithError(err).Error("failed to create coverage requirement")
-		return nil, apierror.Internal("failed to create requirement")
+		return nil, apierror.Internal("failed to create requirement").WithKey("errors.unknown")
 	}
 
 	return cr, nil
@@ -128,20 +128,20 @@ func (s *CoverageService) UpdateRequirement(ctx context.Context, tenantID, id uu
 	logger := ctxutil.GetLogger(ctx)
 
 	if req.DayOfWeek < 0 || req.DayOfWeek > 6 {
-		return nil, apierror.BadRequest("day_of_week must be 0-6")
+		return nil, apierror.BadRequest("day_of_week must be 0-6").WithKey("errors.invalidInput")
 	}
 	if req.StartTime == "" || req.EndTime == "" {
-		return nil, apierror.BadRequest("start_time and end_time are required")
+		return nil, apierror.BadRequest("start_time and end_time are required").WithKey("errors.missingParams")
 	}
 	if req.MinStaff < 1 {
-		return nil, apierror.BadRequest("min_staff must be at least 1")
+		return nil, apierror.BadRequest("min_staff must be at least 1").WithKey("errors.invalidInput")
 	}
 
 	// List and find by ID (no dedicated GetByID in repo interface)
 	reqs, err := s.coverageReqRepo.List(ctx, tenantID)
 	if err != nil {
 		logger.WithError(err).Error("failed to list coverage requirements")
-		return nil, apierror.Internal("failed to get requirement")
+		return nil, apierror.Internal("failed to get requirement").WithKey("errors.unknown")
 	}
 
 	var cr *model.CoverageRequirement
@@ -153,7 +153,7 @@ func (s *CoverageService) UpdateRequirement(ctx context.Context, tenantID, id uu
 	}
 
 	if cr == nil {
-		return nil, apierror.NotFound("coverage requirement", id.String())
+		return nil, apierror.NotFound("coverage requirement", id.String()).WithKey("errors.unknown")
 	}
 
 	cr.DayOfWeek = req.DayOfWeek
@@ -165,7 +165,7 @@ func (s *CoverageService) UpdateRequirement(ctx context.Context, tenantID, id uu
 
 	if err := s.coverageReqRepo.Update(ctx, cr); err != nil {
 		logger.WithError(err).Error("failed to update coverage requirement")
-		return nil, apierror.Internal("failed to update requirement")
+		return nil, apierror.Internal("failed to update requirement").WithKey("errors.unknown")
 	}
 
 	return cr, nil
@@ -177,7 +177,7 @@ func (s *CoverageService) DeleteRequirement(ctx context.Context, tenantID, id uu
 
 	if err := s.coverageReqRepo.Delete(ctx, tenantID, id); err != nil {
 		logger.WithError(err).Error("failed to delete coverage requirement")
-		return apierror.Internal("failed to delete requirement")
+		return apierror.Internal("failed to delete requirement").WithKey("errors.unknown")
 	}
 
 	return nil
@@ -191,7 +191,7 @@ func (s *CoverageService) ComputeForDateRange(ctx context.Context, tenantID uuid
 	requirements, err := s.coverageReqRepo.List(ctx, tenantID)
 	if err != nil {
 		logger.WithError(err).Error("failed to list coverage requirements")
-		return dto.CoverageReport{}, apierror.Internal("failed to compute coverage")
+		return dto.CoverageReport{}, apierror.Internal("failed to compute coverage").WithKey("errors.unknown")
 	}
 
 	// Check whether any requirement uses RequiredRole so we can skip the employee
@@ -212,7 +212,7 @@ func (s *CoverageService) ComputeForDateRange(ctx context.Context, tenantID uuid
 			batch, _, err := s.empRepo.List(ctx, tenantID, page, pageSize)
 			if err != nil {
 				logger.WithError(err).Error("failed to pre-load employees for coverage")
-				return dto.CoverageReport{}, apierror.Internal("failed to compute coverage")
+				return dto.CoverageReport{}, apierror.Internal("failed to compute coverage").WithKey("errors.unknown")
 			}
 			for _, e := range batch {
 				employeeByID[e.ID] = e
@@ -268,7 +268,7 @@ func (s *CoverageService) ComputeForDateRange(ctx context.Context, tenantID uuid
 		dayShifts, err := s.shiftRepo.ListByDate(ctx, tenantID, currentDate)
 		if err != nil {
 			logger.WithError(err).Error("failed to list shifts by date")
-			return dto.CoverageReport{}, apierror.Internal("failed to compute coverage")
+			return dto.CoverageReport{}, apierror.Internal("failed to compute coverage").WithKey("errors.unknown")
 		}
 
 		for _, req := range requirements {

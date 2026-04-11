@@ -93,7 +93,7 @@ func (s *AdminDashboardService) GetDashboard(ctx context.Context) (*AdminDashboa
 		Where("deleted_at IS NULL").
 		Count(&totalStores).Error; err != nil {
 		s.logger.WithError(err).Error("dashboard: count stores")
-		return nil, apierror.Internal("failed to compute dashboard")
+		return nil, apierror.Internal("failed to compute dashboard").WithKey("errors.unknown")
 	}
 
 	// An "active" store has at least one employee with a non-empty auth_id.
@@ -108,7 +108,7 @@ func (s *AdminDashboardService) GetDashboard(ctx context.Context) (*AdminDashboa
 		)`).
 		Count(&activeStores).Error; err != nil {
 		s.logger.WithError(err).Error("dashboard: count active stores")
-		return nil, apierror.Internal("failed to compute dashboard")
+		return nil, apierror.Internal("failed to compute dashboard").WithKey("errors.unknown")
 	}
 
 	// ── 2. Users / onboarding ─────────────────────────────────────────────────
@@ -133,7 +133,7 @@ func (s *AdminDashboardService) GetDashboard(ctx context.Context) (*AdminDashboa
 		`).
 		Scan(&ec).Error; err != nil {
 		s.logger.WithError(err).Error("dashboard: employee counts")
-		return nil, apierror.Internal("failed to compute dashboard")
+		return nil, apierror.Internal("failed to compute dashboard").WithKey("errors.unknown")
 	}
 
 	// ── 3. Integrity ──────────────────────────────────────────────────────────
@@ -148,7 +148,7 @@ func (s *AdminDashboardService) GetDashboard(ctx context.Context) (*AdminDashboa
 		Where("e.deleted_at IS NULL AND s.deleted_at IS NOT NULL").
 		Count(&noStore).Error; err != nil {
 		s.logger.WithError(err).Error("dashboard: noStore count")
-		return nil, apierror.Internal("failed to compute dashboard")
+		return nil, apierror.Internal("failed to compute dashboard").WithKey("errors.unknown")
 	}
 
 	// noRole and expiredTokens share one scan — separate struct to avoid clobbering noStore.
@@ -165,7 +165,7 @@ func (s *AdminDashboardService) GetDashboard(ctx context.Context) (*AdminDashboa
 		`, expiryDate).
 		Scan(&roleAndExpiry).Error; err != nil {
 		s.logger.WithError(err).Error("dashboard: integrity counts")
-		return nil, apierror.Internal("failed to compute dashboard")
+		return nil, apierror.Internal("failed to compute dashboard").WithKey("errors.unknown")
 	}
 
 	// ── 4. Activity ───────────────────────────────────────────────────────────
@@ -185,7 +185,7 @@ func (s *AdminDashboardService) GetDashboard(ctx context.Context) (*AdminDashboa
 		Limit(5).
 		Scan(&storeRows).Error; err != nil {
 		s.logger.WithError(err).Error("dashboard: recent stores")
-		return nil, apierror.Internal("failed to compute dashboard")
+		return nil, apierror.Internal("failed to compute dashboard").WithKey("errors.unknown")
 	}
 
 	// Recent invites (last 5 employees invited by email, bound or not).
@@ -203,7 +203,7 @@ func (s *AdminDashboardService) GetDashboard(ctx context.Context) (*AdminDashboa
 		Limit(5).
 		Scan(&inviteRows).Error; err != nil {
 		s.logger.WithError(err).Error("dashboard: recent invites")
-		return nil, apierror.Internal("failed to compute dashboard")
+		return nil, apierror.Internal("failed to compute dashboard").WithKey("errors.unknown")
 	}
 
 	// ── Assemble ──────────────────────────────────────────────────────────────

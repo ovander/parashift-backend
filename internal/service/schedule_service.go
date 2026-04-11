@@ -89,7 +89,7 @@ func (s *ScheduleService) checkHoliday(ctx context.Context, date time.Time) erro
 		return nil
 	}
 	if isHoliday {
-		return apierror.BadRequest(fmt.Sprintf("'%s' est un jour férié (%s) — aucune affectation autorisée", date.Format("2006-01-02"), name))
+		return apierror.BadRequest(fmt.Sprintf("'%s' est un jour férié (%s) — aucune affectation autorisée", date.Format("2006-01-02"), name)).WithKey("errors.publicHoliday")
 	}
 	return nil
 }
@@ -100,10 +100,10 @@ func (s *ScheduleService) GetByID(ctx context.Context, tenantID, id uuid.UUID) (
 	shift, err := s.shiftRepo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get shift")
-		return nil, apierror.Internal("failed to get shift")
+		return nil, apierror.Internal("failed to get shift").WithKey("errors.unknown")
 	}
 	if shift == nil {
-		return nil, apierror.NotFound("shift", id.String())
+		return nil, apierror.NotFound("shift", id.String()).WithKey("errors.unknown")
 	}
 	return shift, nil
 }
@@ -114,7 +114,7 @@ func (s *ScheduleService) ListByDate(ctx context.Context, tenantID uuid.UUID, da
 	shifts, err := s.shiftRepo.ListByDate(ctx, tenantID, date)
 	if err != nil {
 		logger.WithError(err).Error("failed to list shifts by date")
-		return nil, apierror.Internal("failed to list shifts")
+		return nil, apierror.Internal("failed to list shifts").WithKey("errors.unknown")
 	}
 	return shifts, nil
 }
@@ -126,7 +126,7 @@ func (s *ScheduleService) GetWeekTemplates(ctx context.Context, tenantID, employ
 	templates, err := s.tmplRepo.GetByEmployee(ctx, tenantID, employeeID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get week templates")
-		return dto.WeekTemplateResponse{}, apierror.Internal("failed to get week templates")
+		return dto.WeekTemplateResponse{}, apierror.Internal("failed to get week templates").WithKey("errors.unknown")
 	}
 
 	var entries []dto.WeekTemplateEntry
@@ -154,23 +154,23 @@ func (s *ScheduleService) UpsertWeekTemplates(ctx context.Context, tenantID, emp
 	emp, err := s.empRepo.GetByID(ctx, tenantID, employeeID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get employee")
-		return apierror.Internal("failed to get employee")
+		return apierror.Internal("failed to get employee").WithKey("errors.unknown")
 	}
 	if emp == nil {
-		return apierror.NotFound("employee", employeeID.String())
+		return apierror.NotFound("employee", employeeID.String()).WithKey("errors.unknown")
 	}
 
 	// Build templates from entries (req.Templates, each entry carries its own WeekType)
 	var templates []*model.WeekTemplate
 	for _, entry := range req.Templates {
 		if entry.WeekType != "A" && entry.WeekType != "B" {
-			return apierror.BadRequest("week_type must be 'A' or 'B'")
+			return apierror.BadRequest("week_type must be 'A' or 'B'").WithKey("errors.invalidInput")
 		}
 		if entry.DayOfWeek < 0 || entry.DayOfWeek > 6 {
-			return apierror.BadRequest("day_of_week must be 0-6")
+			return apierror.BadRequest("day_of_week must be 0-6").WithKey("errors.invalidInput")
 		}
 		if entry.StartTime == "" || entry.EndTime == "" {
-			return apierror.BadRequest("start_time and end_time are required")
+			return apierror.BadRequest("start_time and end_time are required").WithKey("errors.missingParams")
 		}
 
 		template := &model.WeekTemplate{
@@ -193,7 +193,7 @@ func (s *ScheduleService) UpsertWeekTemplates(ctx context.Context, tenantID, emp
 	// Upsert templates (this replaces all for the employee)
 	if err := s.tmplRepo.UpsertForEmployee(ctx, tenantID, employeeID, templates); err != nil {
 		logger.WithError(err).Error("failed to upsert week templates")
-		return apierror.Internal("failed to upsert week templates")
+		return apierror.Internal("failed to upsert week templates").WithKey("errors.unknown")
 	}
 
 	return nil
@@ -210,13 +210,13 @@ func (s *ScheduleService) ProjectABSchedule(ctx context.Context, tenantID uuid.U
 	// Enforce a sensible date range cap (max 730 days / ~2 years) to prevent runaway generation.
 	const maxRangeDays = 730
 	if dateTo.Sub(dateFrom).Hours()/24 > float64(maxRangeDays) {
-		return 0, apierror.BadRequest("date range must not exceed 730 days")
+		return 0, apierror.BadRequest("date range must not exceed 730 days").WithKey("errors.invalidInput")
 	}
 
 	// Delete existing TEMPLATE-sourced shifts for the date range first (idempotent)
 	if err := s.shiftRepo.DeleteBySourceTemplate(ctx, tenantID, dateFrom, dateTo); err != nil {
 		logger.WithError(err).Error("failed to delete existing template shifts")
-		return 0, apierror.Internal("failed to delete existing shifts")
+		return 0, apierror.Internal("failed to delete existing shifts").WithKey("errors.unknown")
 	}
 
 	// Load all employees in the store (using pagination to get all)
@@ -227,7 +227,7 @@ func (s *ScheduleService) ProjectABSchedule(ctx context.Context, tenantID uuid.U
 		batch, _, err := s.empRepo.List(ctx, tenantID, page, pageSize)
 		if err != nil {
 			logger.WithError(err).Error("failed to list employees")
-			return 0, apierror.Internal("failed to list employees")
+			return 0, apierror.Internal("failed to list employees").WithKey("errors.unknown")
 		}
 		employees = append(employees, batch...)
 		if len(batch) < pageSize {
@@ -243,7 +243,7 @@ func (s *ScheduleService) ProjectABSchedule(ctx context.Context, tenantID uuid.U
 		tmpls, err := s.tmplRepo.GetByEmployee(ctx, tenantID, emp.ID)
 		if err != nil {
 			logger.WithError(err).Error("failed to get templates for employee")
-			return 0, apierror.Internal("failed to get templates")
+			return 0, apierror.Internal("failed to get templates").WithKey("errors.unknown")
 		}
 		templateMap[emp.ID] = tmpls
 	}
@@ -324,7 +324,7 @@ func (s *ScheduleService) ProjectABSchedule(ctx context.Context, tenantID uuid.U
 			hasLeave, err := s.leaveRepo.HasActiveLeave(ctx, tenantID, emp.ID, currentDate, currentDate)
 			if err != nil {
 				logger.WithError(err).Error("failed to check active leave")
-				return 0, apierror.Internal("failed to check leave")
+				return 0, apierror.Internal("failed to check leave").WithKey("errors.unknown")
 			}
 			if hasLeave {
 				continue
@@ -334,7 +334,7 @@ func (s *ScheduleService) ProjectABSchedule(ctx context.Context, tenantID uuid.U
 			avail, availErr := s.availRepo.GetByEmployeeDate(ctx, tenantID, emp.ID, currentDate)
 			if availErr != nil {
 				logger.WithError(availErr).Error("failed to check availability")
-				return 0, apierror.Internal("failed to check availability")
+				return 0, apierror.Internal("failed to check availability").WithKey("errors.unknown")
 			}
 
 			var availTimeRanges []model.TimeRange
@@ -400,7 +400,7 @@ func (s *ScheduleService) ProjectABSchedule(ctx context.Context, tenantID uuid.U
 	}
 	if err := s.shiftRepo.CreateBatch(ctx, shifts); err != nil {
 		logger.WithError(err).Error("failed to create shifts batch")
-		return 0, apierror.Internal("failed to create shifts")
+		return 0, apierror.Internal("failed to create shifts").WithKey("errors.unknown")
 	}
 
 	// Batch-create all assignments in a single SQL statement — include denormalized
@@ -433,10 +433,24 @@ func (s *ScheduleService) ProjectABSchedule(ctx context.Context, tenantID uuid.U
 		if delErr := s.shiftRepo.DeleteByDateRange(ctx, tenantID, dateFrom, dateTo); delErr != nil {
 			logger.WithError(delErr).Error("compensating shift delete also failed — week may be stuck; use Regenerate")
 		}
-		return 0, apierror.Internal(fmt.Sprintf("failed to create assignments: %s", err.Error()))
+		return 0, apierror.Internal(fmt.Sprintf("failed to create assignments: %s", err.Error())).WithKey("errors.unknown")
 	}
 
-	return len(pending), nil
+	count := len(pending)
+
+	// Publish a single summary event for the bulk generation (not per-shift).
+	s.emitter.Publish(event.Event{
+		Type:     event.TypeScheduleGenerated,
+		TenantID: tenantID,
+		UserID:   ctxutil.GetUserID(ctx),
+		Payload: map[string]interface{}{
+			"from":  dateFrom.Format("2006-01-02"),
+			"to":    dateTo.Format("2006-01-02"),
+			"count": count,
+		},
+	})
+
+	return count, nil
 }
 
 // RegenerateWeek hard-resets a week: deletes ALL shifts and assignments for the
@@ -453,13 +467,13 @@ func (s *ScheduleService) RegenerateWeek(ctx context.Context, tenantID uuid.UUID
 	// 1. Delete all assignments for the week first (FK child before parent).
 	if _, err := s.assignRepo.DeleteByDateRange(ctx, tenantID, from, to); err != nil {
 		logger.WithError(err).Error("regenerate: failed to delete assignments")
-		return 0, apierror.Internal("failed to reset week assignments")
+		return 0, apierror.Internal("failed to reset week assignments").WithKey("errors.unknown")
 	}
 
 	// 2. Delete all shifts for the week (any source).
 	if err := s.shiftRepo.DeleteByDateRange(ctx, tenantID, from, to); err != nil {
 		logger.WithError(err).Error("regenerate: failed to delete shifts")
-		return 0, apierror.Internal("failed to reset week shifts")
+		return 0, apierror.Internal("failed to reset week shifts").WithKey("errors.unknown")
 	}
 
 	// 3. Re-project from templates.
@@ -486,7 +500,7 @@ func (s *ScheduleService) GetSchedule(ctx context.Context, tenantID uuid.UUID, d
 	shifts, total, err := s.shiftRepo.ListByDateRange(ctx, tenantID, dateFrom, dateTo, page, pageSize)
 	if err != nil {
 		logger.WithError(err).Error("failed to get schedule")
-		return nil, 0, apierror.Internal("failed to get schedule")
+		return nil, 0, apierror.Internal("failed to get schedule").WithKey("errors.unknown")
 	}
 
 	if total == 0 {
@@ -504,7 +518,7 @@ func (s *ScheduleService) GetSchedule(ctx context.Context, tenantID uuid.UUID, d
 			shifts, total, err = s.shiftRepo.ListByDateRange(ctx, tenantID, dateFrom, dateTo, page, pageSize)
 			if err != nil {
 				logger.WithError(err).Error("failed to re-fetch schedule after auto-projection")
-				return nil, 0, apierror.Internal("failed to get schedule")
+				return nil, 0, apierror.Internal("failed to get schedule").WithKey("errors.unknown")
 			}
 		}
 	}
@@ -518,7 +532,7 @@ func (s *ScheduleService) CreateShift(ctx context.Context, tenantID uuid.UUID, r
 
 	// req.Date is already time.Time from DTO JSON binding
 	if req.StartTime == "" || req.EndTime == "" {
-		return nil, apierror.BadRequest("start_time and end_time are required")
+		return nil, apierror.BadRequest("start_time and end_time are required").WithKey("errors.missingParams")
 	}
 
 	// Block shift creation on French public holidays.
@@ -528,7 +542,7 @@ func (s *ScheduleService) CreateShift(ctx context.Context, tenantID uuid.UUID, r
 
 	// Reject invalid time ranges (overnight shifts not supported at creation time).
 	if req.StartTime >= req.EndTime {
-		return nil, apierror.BadRequest("start_time must be earlier than end_time")
+		return nil, apierror.BadRequest("start_time must be earlier than end_time").WithKey("errors.invalidInput")
 	}
 
 	// Resolve source (req.Source is *string, defaults to MANUAL)
@@ -537,7 +551,7 @@ func (s *ScheduleService) CreateShift(ctx context.Context, tenantID uuid.UUID, r
 		source = *req.Source
 	}
 	if source != model.SourceTemplate && source != model.SourceOverride && source != model.SourceManual {
-		return nil, apierror.BadRequest("invalid source, must be TEMPLATE, OVERRIDE, or MANUAL")
+		return nil, apierror.BadRequest("invalid source, must be TEMPLATE, OVERRIDE, or MANUAL").WithKey("errors.invalidInput")
 	}
 
 	shift := &model.ShiftInstance{
@@ -558,7 +572,7 @@ func (s *ScheduleService) CreateShift(ctx context.Context, tenantID uuid.UUID, r
 
 	if err := s.shiftRepo.Create(ctx, shift); err != nil {
 		logger.WithError(err).Error("failed to create shift")
-		return nil, apierror.Internal("failed to create shift")
+		return nil, apierror.Internal("failed to create shift").WithKey("errors.unknown")
 	}
 
 	// Publish event
@@ -579,10 +593,10 @@ func (s *ScheduleService) UpdateShift(ctx context.Context, tenantID, id uuid.UUI
 	shift, err := s.shiftRepo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get shift for update")
-		return nil, apierror.Internal("failed to get shift")
+		return nil, apierror.Internal("failed to get shift").WithKey("errors.unknown")
 	}
 	if shift == nil {
-		return nil, apierror.NotFound("shift", id.String())
+		return nil, apierror.NotFound("shift", id.String()).WithKey("errors.unknown")
 	}
 
 	// All UpdateShiftInstanceRequest fields are optional pointers
@@ -611,7 +625,7 @@ func (s *ScheduleService) UpdateShift(ctx context.Context, tenantID, id uuid.UUI
 	shift.UpdatedAt = time.Now()
 	if err := s.shiftRepo.Update(ctx, shift); err != nil {
 		logger.WithError(err).Error("failed to update shift")
-		return nil, apierror.Internal("failed to update shift")
+		return nil, apierror.Internal("failed to update shift").WithKey("errors.unknown")
 	}
 
 	// Publish event
@@ -631,7 +645,7 @@ func (s *ScheduleService) DeleteShift(ctx context.Context, tenantID, id uuid.UUI
 
 	if err := s.shiftRepo.Delete(ctx, tenantID, id); err != nil {
 		logger.WithError(err).Error("failed to delete shift")
-		return apierror.Internal("failed to delete shift")
+		return apierror.Internal("failed to delete shift").WithKey("errors.unknown")
 	}
 
 	// Publish event
@@ -659,10 +673,10 @@ func (s *ScheduleService) CreateAssignment(ctx context.Context, tenantID uuid.UU
 	shift, err := s.shiftRepo.GetByID(ctx, tenantID, shiftID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get shift")
-		return nil, nil, apierror.Internal("failed to get shift")
+		return nil, nil, apierror.Internal("failed to get shift").WithKey("errors.unknown")
 	}
 	if shift == nil {
-		return nil, nil, apierror.NotFound("shift", shiftID.String())
+		return nil, nil, apierror.NotFound("shift", shiftID.String()).WithKey("errors.unknown")
 	}
 
 	// Block assignment on French public holidays.
@@ -674,30 +688,30 @@ func (s *ScheduleService) CreateAssignment(ctx context.Context, tenantID uuid.UU
 	emp, err := s.empRepo.GetByID(ctx, tenantID, empID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get employee")
-		return nil, nil, apierror.Internal("failed to get employee")
+		return nil, nil, apierror.Internal("failed to get employee").WithKey("errors.unknown")
 	}
 	if emp == nil {
-		return nil, nil, apierror.NotFound("employee", empID.String())
+		return nil, nil, apierror.NotFound("employee", empID.String()).WithKey("errors.unknown")
 	}
 
 	// Check for assignment conflicts
 	hasConflict, err := s.assignRepo.ExistsConflict(ctx, tenantID, empID, shift.Date, shift.StartTime, shift.EndTime, nil)
 	if err != nil {
 		logger.WithError(err).Error("failed to check assignment conflicts")
-		return nil, nil, apierror.Internal("failed to check conflicts")
+		return nil, nil, apierror.Internal("failed to check conflicts").WithKey("errors.unknown")
 	}
 	if hasConflict {
-		return nil, nil, apierror.Conflict("employee already has an assignment during this time")
+		return nil, nil, apierror.Conflict("employee already has an assignment during this time").WithKey("errors.conflict")
 	}
 
 	// Check employee doesn't have active leave on shift date
 	hasLeave, err := s.leaveRepo.HasActiveLeave(ctx, tenantID, empID, shift.Date, shift.Date)
 	if err != nil {
 		logger.WithError(err).Error("failed to check active leave")
-		return nil, nil, apierror.Internal("failed to check leave")
+		return nil, nil, apierror.Internal("failed to check leave").WithKey("errors.unknown")
 	}
 	if hasLeave {
-		return nil, nil, apierror.Conflict("employee has active leave during this time")
+		return nil, nil, apierror.Conflict("employee has active leave during this time").WithKey("errors.conflict")
 	}
 
 	// ── Rule Engine evaluation ──────────────────────────────────────────────
@@ -710,7 +724,11 @@ func (s *ScheduleService) CreateAssignment(ctx context.Context, tenantID uuid.UU
 			// Block on BLOCKING severity violations.
 			for _, v := range violations {
 				if v.Severity == model.RuleSeverityBlocking {
-					return nil, violations, apierror.Conflict(v.Message)
+					key := v.Key
+					if key == "" {
+						key = "errors.ruleViolation"
+					}
+					return nil, violations, apierror.Conflict(v.Message).WithKey(key)
 				}
 			}
 		}
@@ -737,7 +755,7 @@ func (s *ScheduleService) CreateAssignment(ctx context.Context, tenantID uuid.UU
 
 	if err := s.assignRepo.Create(ctx, assignment); err != nil {
 		logger.WithError(err).Error("failed to create assignment")
-		return nil, nil, apierror.Internal("failed to create assignment")
+		return nil, nil, apierror.Internal("failed to create assignment").WithKey("errors.unknown")
 	}
 
 	// Publish event
@@ -757,7 +775,7 @@ func (s *ScheduleService) GetAssignmentsByDateRange(ctx context.Context, tenantI
 	assignments, err := s.assignRepo.ListByDateRange(ctx, tenantID, from, to)
 	if err != nil {
 		logger.WithError(err).Error("failed to list assignments by date range")
-		return nil, apierror.Internal("failed to list assignments")
+		return nil, apierror.Internal("failed to list assignments").WithKey("errors.unknown")
 	}
 	return assignments, nil
 }
@@ -768,7 +786,7 @@ func (s *ScheduleService) GetAssignments(ctx context.Context, tenantID, shiftID 
 	assignments, err := s.assignRepo.ListByShift(ctx, tenantID, shiftID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get assignments")
-		return nil, apierror.Internal("failed to get assignments")
+		return nil, apierror.Internal("failed to get assignments").WithKey("errors.unknown")
 	}
 	return assignments, nil
 }
@@ -780,15 +798,15 @@ func (s *ScheduleService) DeleteAssignment(ctx context.Context, tenantID, assign
 	assignment, err := s.assignRepo.GetByID(ctx, tenantID, assignmentID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get assignment")
-		return apierror.Internal("failed to get assignment")
+		return apierror.Internal("failed to get assignment").WithKey("errors.unknown")
 	}
 	if assignment == nil {
-		return apierror.NotFound("assignment", assignmentID.String())
+		return apierror.NotFound("assignment", assignmentID.String()).WithKey("errors.unknown")
 	}
 
 	if err := s.assignRepo.Delete(ctx, tenantID, assignmentID); err != nil {
 		logger.WithError(err).Error("failed to delete assignment")
-		return apierror.Internal("failed to delete assignment")
+		return apierror.Internal("failed to delete assignment").WithKey("errors.unknown")
 	}
 
 	s.emitter.Publish(event.Event{
@@ -814,7 +832,7 @@ func (s *ScheduleService) ResetWeekAssignments(ctx context.Context, tenantID uui
 	deleted, err := s.assignRepo.DeleteByDateRange(ctx, tenantID, from, to)
 	if err != nil {
 		logger.WithError(err).Error("failed to reset week assignments")
-		return 0, apierror.Internal("failed to reset week assignments")
+		return 0, apierror.Internal("failed to reset week assignments").WithKey("errors.unknown")
 	}
 
 	s.emitter.Publish(event.Event{
@@ -835,17 +853,17 @@ func (s *ScheduleService) GenerateICS(ctx context.Context, tenantID, employeeID 
 	emp, err := s.empRepo.GetByID(ctx, tenantID, employeeID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get employee")
-		return "", apierror.Internal("failed to get employee")
+		return "", apierror.Internal("failed to get employee").WithKey("errors.unknown")
 	}
 	if emp == nil {
-		return "", apierror.NotFound("employee", employeeID.String())
+		return "", apierror.NotFound("employee", employeeID.String()).WithKey("errors.unknown")
 	}
 
 	// Get assignments for the employee in the date range
 	assignments, err := s.assignRepo.ListByEmployee(ctx, tenantID, employeeID, from, to)
 	if err != nil {
 		logger.WithError(err).Error("failed to get assignments")
-		return "", apierror.Internal("failed to get assignments")
+		return "", apierror.Internal("failed to get assignments").WithKey("errors.unknown")
 	}
 
 	// Batch-load all required shifts in one query.
@@ -862,7 +880,7 @@ func (s *ScheduleService) GenerateICS(ctx context.Context, tenantID, employeeID 
 		batchShifts, err := s.shiftRepo.ListByIDs(ctx, tenantID, ids)
 		if err != nil {
 			logger.WithError(err).Error("failed to batch-load shifts for ICS")
-			return "", apierror.Internal("failed to load shifts")
+			return "", apierror.Internal("failed to load shifts").WithKey("errors.unknown")
 		}
 		shiftByID = make(map[uuid.UUID]*model.ShiftInstance, len(batchShifts))
 		for _, sh := range batchShifts {
@@ -924,7 +942,7 @@ func (s *ScheduleService) PublishSchedule(ctx context.Context, tenantID uuid.UUI
 	count, err := s.shiftRepo.SetStatusByDateRange(ctx, tenantID, from, to, model.ShiftStatusPublished)
 	if err != nil {
 		logger.WithError(err).Error("failed to publish schedule")
-		return 0, apierror.Internal("failed to publish schedule")
+		return 0, apierror.Internal("failed to publish schedule").WithKey("errors.unknown")
 	}
 
 	s.emitter.Publish(event.Event{
@@ -950,7 +968,7 @@ func (s *ScheduleService) ListMyShifts(ctx context.Context, tenantID, employeeID
 	assignments, err := s.assignRepo.ListByEmployee(ctx, tenantID, employeeID, from, to)
 	if err != nil {
 		logger.WithError(err).Error("failed to list employee assignments")
-		return nil, apierror.Internal("failed to list assignments")
+		return nil, apierror.Internal("failed to list assignments").WithKey("errors.unknown")
 	}
 
 	if len(assignments) == 0 {
@@ -970,7 +988,7 @@ func (s *ScheduleService) ListMyShifts(ctx context.Context, tenantID, employeeID
 	shifts, err := s.shiftRepo.ListByIDs(ctx, tenantID, shiftIDs)
 	if err != nil {
 		logger.WithError(err).Error("failed to batch-load shifts")
-		return nil, apierror.Internal("failed to load shifts")
+		return nil, apierror.Internal("failed to load shifts").WithKey("errors.unknown")
 	}
 
 	// Index shifts by ID for O(1) lookup.

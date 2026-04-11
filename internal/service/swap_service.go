@@ -57,17 +57,17 @@ func (s *SwapService) CreateSwapRequest(ctx context.Context, tenantID, requester
 	shift, err := s.shiftRepo.GetByID(ctx, tenantID, shiftID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get shift")
-		return nil, apierror.Internal("failed to get shift")
+		return nil, apierror.Internal("failed to get shift").WithKey("errors.unknown")
 	}
 	if shift == nil {
-		return nil, apierror.NotFound("shift", shiftID.String())
+		return nil, apierror.NotFound("shift", shiftID.String()).WithKey("errors.unknown")
 	}
 
 	// Check requester has an assignment for this shift
 	assignments, err := s.assignRepo.ListByShift(ctx, tenantID, shiftID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get assignments")
-		return nil, apierror.Internal("failed to get assignments")
+		return nil, apierror.Internal("failed to get assignments").WithKey("errors.unknown")
 	}
 
 	var requesterAssignment *model.ShiftAssignment
@@ -79,7 +79,7 @@ func (s *SwapService) CreateSwapRequest(ctx context.Context, tenantID, requester
 	}
 
 	if requesterAssignment == nil {
-		return nil, apierror.Conflict("requester does not have an active assignment for this shift")
+		return nil, apierror.Conflict("requester does not have an active assignment for this shift").WithKey("errors.conflict")
 	}
 
 	// req.TargetEmployeeID and req.TargetShiftID are already *uuid.UUID from DTO — use directly
@@ -100,7 +100,7 @@ func (s *SwapService) CreateSwapRequest(ctx context.Context, tenantID, requester
 
 	if err := s.repo.Create(ctx, swapRequest); err != nil {
 		logger.WithError(err).Error("failed to create swap request")
-		return nil, apierror.Internal("failed to create swap request")
+		return nil, apierror.Internal("failed to create swap request").WithKey("errors.unknown")
 	}
 
 	// Publish event
@@ -121,15 +121,15 @@ func (s *SwapService) ReviewSwapRequest(ctx context.Context, tenantID, id uuid.U
 	swapRequest, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get swap request")
-		return nil, apierror.Internal("failed to get swap request")
+		return nil, apierror.Internal("failed to get swap request").WithKey("errors.unknown")
 	}
 	if swapRequest == nil {
-		return nil, apierror.NotFound("swap request", id.String())
+		return nil, apierror.NotFound("swap request", id.String()).WithKey("errors.unknown")
 	}
 
 	// Validate status
 	if req.Status != model.SwapStatusAccepted && req.Status != model.SwapStatusRejected && req.Status != model.SwapStatusCancelled {
-		return nil, apierror.BadRequest("status must be 'accepted', 'rejected', or 'cancelled'")
+		return nil, apierror.BadRequest("status must be 'accepted', 'rejected', or 'cancelled'").WithKey("errors.invalidInput")
 	}
 
 	now := time.Now()
@@ -141,7 +141,7 @@ func (s *SwapService) ReviewSwapRequest(ctx context.Context, tenantID, id uuid.U
 
 	if err := s.repo.Update(ctx, swapRequest); err != nil {
 		logger.WithError(err).Error("failed to update swap request")
-		return nil, apierror.Internal("failed to update swap request")
+		return nil, apierror.Internal("failed to update swap request").WithKey("errors.unknown")
 	}
 
 	// If accepted, run rule engine validation before performing the swap.
@@ -153,7 +153,7 @@ func (s *SwapService) ReviewSwapRequest(ctx context.Context, tenantID, id uuid.U
 		}
 		if err := s.performSwap(ctx, tenantID, swapRequest); err != nil {
 			logger.WithError(err).Error("failed to perform swap")
-			return nil, apierror.Internal("failed to perform swap")
+			return nil, apierror.Internal("failed to perform swap").WithKey("errors.unknown")
 		}
 	}
 
@@ -175,10 +175,10 @@ func (s *SwapService) GetSwapRequest(ctx context.Context, tenantID, id uuid.UUID
 	swapRequest, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get swap request")
-		return nil, apierror.Internal("failed to get swap request")
+		return nil, apierror.Internal("failed to get swap request").WithKey("errors.unknown")
 	}
 	if swapRequest == nil {
-		return nil, apierror.NotFound("swap request", id.String())
+		return nil, apierror.NotFound("swap request", id.String()).WithKey("errors.unknown")
 	}
 
 	return swapRequest, nil
@@ -191,7 +191,7 @@ func (s *SwapService) ListByEmployee(ctx context.Context, tenantID, employeeID u
 	swaps, total, err := s.repo.ListByEmployee(ctx, tenantID, employeeID, page, pageSize)
 	if err != nil {
 		logger.WithError(err).Error("failed to list swap requests")
-		return nil, 0, apierror.Internal("failed to list swap requests")
+		return nil, 0, apierror.Internal("failed to list swap requests").WithKey("errors.unknown")
 	}
 
 	return swaps, total, nil
@@ -204,7 +204,7 @@ func (s *SwapService) ListByStore(ctx context.Context, tenantID uuid.UUID, statu
 	swaps, total, err := s.repo.ListByStore(ctx, tenantID, status, page, pageSize)
 	if err != nil {
 		logger.WithError(err).Error("failed to list swap requests")
-		return nil, 0, apierror.Internal("failed to list swap requests")
+		return nil, 0, apierror.Internal("failed to list swap requests").WithKey("errors.unknown")
 	}
 
 	return swaps, total, nil
@@ -235,7 +235,11 @@ func (s *SwapService) validateSwapRules(ctx context.Context, tenantID uuid.UUID,
 	}
 	for _, v := range violations {
 		if v.Severity == model.RuleSeverityBlocking {
-			return apierror.Conflict(v.Message)
+			key := v.Key
+			if key == "" {
+				key = "errors.ruleViolation"
+			}
+			return apierror.Conflict(v.Message).WithKey(key)
 		}
 	}
 
@@ -256,7 +260,11 @@ func (s *SwapService) validateSwapRules(ctx context.Context, tenantID uuid.UUID,
 		}
 		for _, v := range violations {
 			if v.Severity == model.RuleSeverityBlocking {
-				return apierror.Conflict(v.Message)
+				key := v.Key
+				if key == "" {
+					key = "errors.ruleViolation"
+				}
+				return apierror.Conflict(v.Message).WithKey(key)
 			}
 		}
 	}
@@ -281,7 +289,7 @@ func (s *SwapService) performSwap(ctx context.Context, tenantID uuid.UUID, swapR
 	}
 
 	if requesterAssignment == nil {
-		return apierror.Conflict("requester assignment not found")
+		return apierror.Conflict("requester assignment not found").WithKey("errors.conflict")
 	}
 
 	// Collect all updates to apply atomically.
@@ -308,17 +316,17 @@ func (s *SwapService) performSwap(ctx context.Context, tenantID uuid.UUID, swapR
 		}
 
 		if targetAssignment == nil {
-			return apierror.Conflict("target assignment not found")
+			return apierror.Conflict("target assignment not found").WithKey("errors.conflict")
 		}
 
 		// Load the new shifts to refresh the denormalized time fields.
 		targetShift, err := s.shiftRepo.GetByID(ctx, tenantID, *swapRequest.TargetShiftID)
 		if err != nil || targetShift == nil {
-			return apierror.Conflict("target shift not found")
+			return apierror.Conflict("target shift not found").WithKey("errors.conflict")
 		}
 		originalShift, err := s.shiftRepo.GetByID(ctx, tenantID, swapRequest.ShiftInstanceID)
 		if err != nil || originalShift == nil {
-			return apierror.Conflict("original shift not found")
+			return apierror.Conflict("original shift not found").WithKey("errors.conflict")
 		}
 
 		requesterAssignment.ShiftInstanceID = *swapRequest.TargetShiftID
@@ -346,7 +354,7 @@ func (s *SwapService) performSwap(ctx context.Context, tenantID uuid.UUID, swapR
 		// Move requester to a different shift — refresh the denormalized fields.
 		newShift, err := s.shiftRepo.GetByID(ctx, tenantID, *swapRequest.TargetShiftID)
 		if err != nil || newShift == nil {
-			return apierror.Conflict("target shift not found")
+			return apierror.Conflict("target shift not found").WithKey("errors.conflict")
 		}
 		requesterAssignment.ShiftInstanceID = *swapRequest.TargetShiftID
 		requesterAssignment.ShiftDate = newShift.Date

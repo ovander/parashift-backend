@@ -107,7 +107,7 @@ func (s *PublicHolidayService) fetchAndStore(ctx context.Context, year int, zone
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return apierror.Internal("failed to build holiday API request")
+		return apierror.Internal("failed to build holiday API request").WithKey("errors.unknown")
 	}
 	req.Header.Set("Accept", "application/json")
 

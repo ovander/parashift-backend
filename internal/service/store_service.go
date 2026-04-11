@@ -39,10 +39,10 @@ func (s *StoreService) GetByID(ctx context.Context, id uuid.UUID) (*model.Store,
 	store, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get store")
-		return nil, apierror.Internal("failed to get store")
+		return nil, apierror.Internal("failed to get store").WithKey("errors.unknown")
 	}
 	if store == nil {
-		return nil, apierror.NotFound("store", id.String())
+		return nil, apierror.NotFound("store", id.String()).WithKey("errors.unknown")
 	}
 	return store, nil
 }
@@ -53,7 +53,7 @@ func (s *StoreService) List(ctx context.Context, page, pageSize int) ([]*model.S
 	stores, total, err := s.repo.List(ctx, page, pageSize)
 	if err != nil {
 		logger.WithError(err).Error("failed to list stores")
-		return nil, 0, apierror.Internal("failed to list stores")
+		return nil, 0, apierror.Internal("failed to list stores").WithKey("errors.unknown")
 	}
 	return stores, total, nil
 }
@@ -63,7 +63,7 @@ func (s *StoreService) Create(ctx context.Context, req dto.CreateStoreRequest) (
 	logger := ctxutil.GetLogger(ctx)
 
 	if req.Name == "" {
-		return nil, apierror.BadRequest("store name is required")
+		return nil, apierror.BadRequest("store name is required").WithKey("errors.invalidInput")
 	}
 
 	store := &model.Store{
@@ -78,18 +78,18 @@ func (s *StoreService) Create(ctx context.Context, req dto.CreateStoreRequest) (
 		data, err := serializeOpeningHours(req.OpeningHours)
 		if err != nil {
 			logger.WithError(err).Error("failed to serialize opening hours")
-			return nil, apierror.BadRequest("invalid opening hours format")
+			return nil, apierror.BadRequest("invalid opening hours format").WithKey("errors.invalidInput")
 		}
 		store.OpeningHours = data
 	}
 
 	if err := s.repo.Create(ctx, store); err != nil {
 		logger.WithError(err).Error("failed to create store")
-		return nil, apierror.Internal("failed to create store")
+		return nil, apierror.Internal("failed to create store").WithKey("errors.unknown")
 	}
 
 	s.emitter.Publish(event.Event{
-		Type:     event.TypeEmployeeCreated,
+		Type:     event.TypeStoreCreated,
 		TenantID: store.ID,
 		UserID:   ctxutil.GetUserID(ctx),
 		Payload:  store,
@@ -105,10 +105,10 @@ func (s *StoreService) Update(ctx context.Context, id uuid.UUID, req dto.UpdateS
 	store, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get store for update")
-		return nil, apierror.Internal("failed to get store")
+		return nil, apierror.Internal("failed to get store").WithKey("errors.unknown")
 	}
 	if store == nil {
-		return nil, apierror.NotFound("store", id.String())
+		return nil, apierror.NotFound("store", id.String()).WithKey("errors.unknown")
 	}
 
 	if req.Name != nil {
@@ -121,7 +121,7 @@ func (s *StoreService) Update(ctx context.Context, id uuid.UUID, req dto.UpdateS
 		data, err := serializeOpeningHours(req.OpeningHours)
 		if err != nil {
 			logger.WithError(err).Error("failed to serialize opening hours")
-			return nil, apierror.BadRequest("invalid opening hours format")
+			return nil, apierror.BadRequest("invalid opening hours format").WithKey("errors.invalidInput")
 		}
 		store.OpeningHours = data
 	}
@@ -129,8 +129,15 @@ func (s *StoreService) Update(ctx context.Context, id uuid.UUID, req dto.UpdateS
 	store.UpdatedAt = time.Now()
 	if err := s.repo.Update(ctx, store); err != nil {
 		logger.WithError(err).Error("failed to update store")
-		return nil, apierror.Internal("failed to update store")
+		return nil, apierror.Internal("failed to update store").WithKey("errors.unknown")
 	}
+
+	s.emitter.Publish(event.Event{
+		Type:     event.TypeStoreUpdated,
+		TenantID: store.ID,
+		UserID:   ctxutil.GetUserID(ctx),
+		Payload:  store,
+	})
 
 	return store, nil
 }
@@ -141,7 +148,7 @@ func (s *StoreService) Delete(ctx context.Context, id uuid.UUID) error {
 
 	if err := s.repo.Delete(ctx, id); err != nil {
 		logger.WithError(err).Error("failed to delete store")
-		return apierror.Internal("failed to delete store")
+		return apierror.Internal("failed to delete store").WithKey("errors.unknown")
 	}
 	return nil
 }

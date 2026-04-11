@@ -35,7 +35,7 @@ func (s *RuleService) List(ctx context.Context, tenantID uuid.UUID) ([]*model.Ru
 	rules, err := s.ruleRepo.List(ctx, tenantID)
 	if err != nil {
 		logger.WithError(err).Error("failed to list rules")
-		return nil, apierror.Internal("failed to list rules")
+		return nil, apierror.Internal("failed to list rules").WithKey("errors.unknown")
 	}
 	return rules, nil
 }
@@ -47,10 +47,10 @@ func (s *RuleService) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*mod
 	rule, err := s.ruleRepo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get rule")
-		return nil, apierror.Internal("failed to get rule")
+		return nil, apierror.Internal("failed to get rule").WithKey("errors.unknown")
 	}
 	if rule == nil {
-		return nil, apierror.NotFound("rule", id.String())
+		return nil, apierror.NotFound("rule", id.String()).WithKey("errors.unknown")
 	}
 	return rule, nil
 }
@@ -73,7 +73,7 @@ func (s *RuleService) Create(ctx context.Context, tenantID uuid.UUID, req dto.Cr
 
 	cfgBytes, err := json.Marshal(req.Configuration)
 	if err != nil {
-		return nil, apierror.BadRequest("invalid configuration JSON")
+		return nil, apierror.BadRequest("invalid configuration JSON").WithKey("errors.invalidInput")
 	}
 
 	enabled := true
@@ -97,7 +97,7 @@ func (s *RuleService) Create(ctx context.Context, tenantID uuid.UUID, req dto.Cr
 
 	if err := s.ruleRepo.Create(ctx, rule); err != nil {
 		logger.WithError(err).Error("failed to create rule")
-		return nil, apierror.Internal("failed to create rule")
+		return nil, apierror.Internal("failed to create rule").WithKey("errors.unknown")
 	}
 	return rule, nil
 }
@@ -109,10 +109,10 @@ func (s *RuleService) Update(ctx context.Context, tenantID, id uuid.UUID, req dt
 	rule, err := s.ruleRepo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get rule")
-		return nil, apierror.Internal("failed to get rule")
+		return nil, apierror.Internal("failed to get rule").WithKey("errors.unknown")
 	}
 	if rule == nil {
-		return nil, apierror.NotFound("rule", id.String())
+		return nil, apierror.NotFound("rule", id.String()).WithKey("errors.unknown")
 	}
 
 	if req.Severity != "" {
@@ -127,7 +127,7 @@ func (s *RuleService) Update(ctx context.Context, tenantID, id uuid.UUID, req dt
 		}
 		cfgBytes, err := json.Marshal(req.Configuration)
 		if err != nil {
-			return nil, apierror.BadRequest("invalid configuration JSON")
+			return nil, apierror.BadRequest("invalid configuration JSON").WithKey("errors.invalidInput")
 		}
 		rule.Configuration = cfgBytes
 	}
@@ -141,7 +141,7 @@ func (s *RuleService) Update(ctx context.Context, tenantID, id uuid.UUID, req dt
 
 	if err := s.ruleRepo.Update(ctx, rule); err != nil {
 		logger.WithError(err).Error("failed to update rule")
-		return nil, apierror.Internal("failed to update rule")
+		return nil, apierror.Internal("failed to update rule").WithKey("errors.unknown")
 	}
 	return rule, nil
 }
@@ -153,15 +153,15 @@ func (s *RuleService) Delete(ctx context.Context, tenantID, id uuid.UUID) error 
 	rule, err := s.ruleRepo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get rule")
-		return apierror.Internal("failed to get rule")
+		return apierror.Internal("failed to get rule").WithKey("errors.unknown")
 	}
 	if rule == nil {
-		return apierror.NotFound("rule", id.String())
+		return apierror.NotFound("rule", id.String()).WithKey("errors.unknown")
 	}
 
 	if err := s.ruleRepo.Delete(ctx, tenantID, id); err != nil {
 		logger.WithError(err).Error("failed to delete rule")
-		return apierror.Internal("failed to delete rule")
+		return apierror.Internal("failed to delete rule").WithKey("errors.unknown")
 	}
 	return nil
 }
@@ -174,7 +174,7 @@ func validateRuleType(t string) error {
 		model.RuleTypeNoOverlap, model.RuleTypeMinRest:
 		return nil
 	default:
-		return apierror.BadRequest("invalid rule type: " + t)
+		return apierror.BadRequest("invalid rule type: " + t).WithKey("errors.invalidInput")
 	}
 }
 
@@ -183,7 +183,7 @@ func validateSeverity(s string) error {
 	case model.RuleSeverityBlocking, model.RuleSeverityWarning, model.RuleSeverityInfo:
 		return nil
 	default:
-		return apierror.BadRequest("invalid severity: " + s)
+		return apierror.BadRequest("invalid severity: " + s).WithKey("errors.invalidInput")
 	}
 }
 
@@ -192,11 +192,11 @@ func validateRuleConfig(ruleType string, cfg map[string]interface{}) error {
 	switch ruleType {
 	case model.RuleTypeMaxHours:
 		if _, ok := cfg["max_weekly_hours"]; !ok {
-			return apierror.BadRequest("max_hours rule requires 'max_weekly_hours' in configuration")
+			return apierror.BadRequest("max_hours rule requires 'max_weekly_hours' in configuration").WithKey("errors.invalidInput")
 		}
 	case model.RuleTypeMinRest:
 		if _, ok := cfg["min_rest_hours"]; !ok {
-			return apierror.BadRequest("min_rest rule requires 'min_rest_hours' in configuration")
+			return apierror.BadRequest("min_rest rule requires 'min_rest_hours' in configuration").WithKey("errors.invalidInput")
 		}
 	case model.RuleTypeRole:
 		// required_role is optional (falls back to shift's own qualification)

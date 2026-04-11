@@ -44,35 +44,35 @@ func (s *LeaveService) CreateLeaveRequest(ctx context.Context, tenantID, employe
 	emp, err := s.empRepo.GetByID(ctx, tenantID, employeeID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get employee")
-		return nil, apierror.Internal("failed to get employee")
+		return nil, apierror.Internal("failed to get employee").WithKey("errors.unknown")
 	}
 	if emp == nil {
-		return nil, apierror.NotFound("employee", employeeID.String())
+		return nil, apierror.NotFound("employee", employeeID.String()).WithKey("errors.unknown")
 	}
 
 	// Parse YYYY-MM-DD string dates from the DTO.
 	startDate, endDate, err := req.ParsedDates()
 	if err != nil {
-		return nil, apierror.BadRequest(err.Error())
+		return nil, apierror.BadRequest(err.Error()).WithKey("errors.invalidInput")
 	}
 
 	if startDate.After(endDate) {
-		return nil, apierror.BadRequest("start_date must be before or equal to end_date")
+		return nil, apierror.BadRequest("start_date must be before or equal to end_date").WithKey("errors.invalidInput")
 	}
 
 	// Validate leave type
 	if req.Type != model.LeaveTypeVacation && req.Type != model.LeaveTypeSick && req.Type != model.LeaveTypeOther {
-		return nil, apierror.BadRequest("invalid leave type")
+		return nil, apierror.BadRequest("invalid leave type").WithKey("errors.invalidInput")
 	}
 
 	// Check for overlapping pending/approved leave
 	hasOverlap, err := s.repo.HasActiveLeave(ctx, tenantID, employeeID, startDate, endDate)
 	if err != nil {
 		logger.WithError(err).Error("failed to check for overlapping leave")
-		return nil, apierror.Internal("failed to check overlapping leave")
+		return nil, apierror.Internal("failed to check overlapping leave").WithKey("errors.unknown")
 	}
 	if hasOverlap {
-		return nil, apierror.Conflict("employee already has leave during this period")
+		return nil, apierror.Conflict("employee already has leave during this period").WithKey("errors.conflict")
 	}
 
 	leave := &model.LeaveRequest{
@@ -92,7 +92,7 @@ func (s *LeaveService) CreateLeaveRequest(ctx context.Context, tenantID, employe
 
 	if err := s.repo.Create(ctx, leave); err != nil {
 		logger.WithError(err).Error("failed to create leave request")
-		return nil, apierror.Internal("failed to create leave request")
+		return nil, apierror.Internal("failed to create leave request").WithKey("errors.unknown")
 	}
 
 	// Publish event
@@ -113,15 +113,15 @@ func (s *LeaveService) ReviewLeaveRequest(ctx context.Context, tenantID, id uuid
 	leave, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get leave request")
-		return nil, apierror.Internal("failed to get leave request")
+		return nil, apierror.Internal("failed to get leave request").WithKey("errors.unknown")
 	}
 	if leave == nil {
-		return nil, apierror.NotFound("leave request", id.String())
+		return nil, apierror.NotFound("leave request", id.String()).WithKey("errors.unknown")
 	}
 
 	// Validate status
 	if req.Status != model.LeaveStatusApproved && req.Status != model.LeaveStatusRejected {
-		return nil, apierror.BadRequest("status must be 'approved' or 'rejected'")
+		return nil, apierror.BadRequest("status must be 'approved' or 'rejected'").WithKey("errors.invalidInput")
 	}
 
 	now := time.Now()
@@ -134,7 +134,7 @@ func (s *LeaveService) ReviewLeaveRequest(ctx context.Context, tenantID, id uuid
 
 	if err := s.repo.Update(ctx, leave); err != nil {
 		logger.WithError(err).Error("failed to update leave request")
-		return nil, apierror.Internal("failed to update leave request")
+		return nil, apierror.Internal("failed to update leave request").WithKey("errors.unknown")
 	}
 
 	// If approved, cancel assignments in the leave period
@@ -164,17 +164,17 @@ func (s *LeaveService) GetLeaveImpact(ctx context.Context, tenantID, id uuid.UUI
 	leave, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get leave request")
-		return nil, apierror.Internal("failed to get leave request")
+		return nil, apierror.Internal("failed to get leave request").WithKey("errors.unknown")
 	}
 	if leave == nil {
-		return nil, apierror.NotFound("leave request", id.String())
+		return nil, apierror.NotFound("leave request", id.String()).WithKey("errors.unknown")
 	}
 
 	// Fetch all non-cancelled assignments for this employee during the leave period.
 	assignments, err := s.assignRepo.ListByEmployee(ctx, tenantID, leave.EmployeeID, leave.StartDate, leave.EndDate)
 	if err != nil {
 		logger.WithError(err).Error("failed to list employee assignments")
-		return nil, apierror.Internal("failed to compute leave impact")
+		return nil, apierror.Internal("failed to compute leave impact").WithKey("errors.unknown")
 	}
 
 	var (
@@ -250,19 +250,28 @@ func (s *LeaveService) DeleteLeaveRequest(ctx context.Context, tenantID, id uuid
 	leave, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get leave request")
-		return apierror.Internal("failed to get leave request")
+		return apierror.Internal("failed to get leave request").WithKey("errors.unknown")
 	}
 	if leave == nil {
-		return apierror.NotFound("leave request", id.String())
+		return apierror.NotFound("leave request", id.String()).WithKey("errors.unknown")
 	}
 	if leave.Status != model.LeaveStatusPending {
-		return apierror.BadRequest("only pending leave requests can be cancelled")
+		return apierror.BadRequest("only pending leave requests can be cancelled").WithKey("errors.invalidInput")
 	}
 
 	if err := s.repo.Delete(ctx, tenantID, id); err != nil {
 		logger.WithError(err).Error("failed to delete leave request")
-		return apierror.Internal("failed to delete leave request")
+		return apierror.Internal("failed to delete leave request").WithKey("errors.unknown")
 	}
+
+	// Publish event
+	s.emitter.Publish(event.Event{
+		Type:     event.TypeLeaveDeleted,
+		TenantID: tenantID,
+		UserID:   ctxutil.GetUserID(ctx),
+		Payload:  map[string]interface{}{"id": id, "employee_id": leave.EmployeeID},
+	})
+
 	return nil
 }
 
@@ -273,10 +282,10 @@ func (s *LeaveService) GetLeaveRequest(ctx context.Context, tenantID, id uuid.UU
 	leave, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get leave request")
-		return nil, apierror.Internal("failed to get leave request")
+		return nil, apierror.Internal("failed to get leave request").WithKey("errors.unknown")
 	}
 	if leave == nil {
-		return nil, apierror.NotFound("leave request", id.String())
+		return nil, apierror.NotFound("leave request", id.String()).WithKey("errors.unknown")
 	}
 
 	return leave, nil
@@ -289,7 +298,7 @@ func (s *LeaveService) ListByEmployee(ctx context.Context, tenantID, employeeID 
 	leaves, total, err := s.repo.ListByEmployee(ctx, tenantID, employeeID, page, pageSize)
 	if err != nil {
 		logger.WithError(err).Error("failed to list leave requests")
-		return nil, 0, apierror.Internal("failed to list leave requests")
+		return nil, 0, apierror.Internal("failed to list leave requests").WithKey("errors.unknown")
 	}
 
 	return leaves, total, nil
@@ -302,7 +311,7 @@ func (s *LeaveService) ListByStore(ctx context.Context, tenantID uuid.UUID, stat
 	leaves, total, err := s.repo.ListByStore(ctx, tenantID, status, page, pageSize)
 	if err != nil {
 		logger.WithError(err).Error("failed to list leave requests")
-		return nil, 0, apierror.Internal("failed to list leave requests")
+		return nil, 0, apierror.Internal("failed to list leave requests").WithKey("errors.unknown")
 	}
 
 	return leaves, total, nil

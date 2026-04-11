@@ -42,7 +42,7 @@ func (s *QualificationService) ListQualifications(ctx context.Context, tenantID 
 	quals, err := s.qualRepo.List(ctx, tenantID)
 	if err != nil {
 		logger.WithError(err).Error("failed to list qualifications")
-		return nil, apierror.Internal("failed to list qualifications")
+		return nil, apierror.Internal("failed to list qualifications").WithKey("errors.unknown")
 	}
 
 	logger.WithField("count", len(quals)).Debug("qualifications listed")
@@ -64,7 +64,7 @@ func (s *QualificationService) CreateQualification(ctx context.Context, tenantID
 	}).Info("creating qualification")
 
 	if req.Name == "" {
-		return nil, apierror.BadRequest("name is required")
+		return nil, apierror.BadRequest("name is required").WithKey("errors.invalidInput")
 	}
 
 	qual := &model.Qualification{
@@ -81,7 +81,7 @@ func (s *QualificationService) CreateQualification(ctx context.Context, tenantID
 
 	if err := s.qualRepo.Create(ctx, qual); err != nil {
 		logger.WithError(err).Error("failed to create qualification")
-		return nil, apierror.Internal("failed to create qualification")
+		return nil, apierror.Internal("failed to create qualification").WithKey("errors.unknown")
 	}
 
 	logger.WithField("qual_id", qual.ID).Info("qualification created")
@@ -102,11 +102,11 @@ func (s *QualificationService) UpdateQualification(ctx context.Context, tenantID
 	qual, err := s.qualRepo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get qualification")
-		return nil, apierror.Internal("failed to get qualification")
+		return nil, apierror.Internal("failed to get qualification").WithKey("errors.unknown")
 	}
 	if qual == nil {
 		logger.WithField("qual_id", id).Warn("qualification not found for update")
-		return nil, apierror.NotFound("qualification", id.String())
+		return nil, apierror.NotFound("qualification", id.String()).WithKey("errors.unknown")
 	}
 
 	if req.Name != "" {
@@ -123,7 +123,7 @@ func (s *QualificationService) UpdateQualification(ctx context.Context, tenantID
 
 	if err := s.qualRepo.Update(ctx, qual); err != nil {
 		logger.WithError(err).Error("failed to update qualification")
-		return nil, apierror.Internal("failed to update qualification")
+		return nil, apierror.Internal("failed to update qualification").WithKey("errors.unknown")
 	}
 
 	logger.WithField("qual_id", qual.ID).Info("qualification updated")
@@ -144,16 +144,16 @@ func (s *QualificationService) DeleteQualification(ctx context.Context, tenantID
 	qual, err := s.qualRepo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.WithError(err).Error("failed to get qualification for delete")
-		return apierror.Internal("failed to get qualification")
+		return apierror.Internal("failed to get qualification").WithKey("errors.unknown")
 	}
 	if qual == nil {
 		logger.WithField("qual_id", id).Warn("qualification not found for delete")
-		return apierror.NotFound("qualification", id.String())
+		return apierror.NotFound("qualification", id.String()).WithKey("errors.unknown")
 	}
 
 	if err := s.qualRepo.Delete(ctx, tenantID, id); err != nil {
 		logger.WithError(err).Error("failed to delete qualification")
-		return apierror.Internal("failed to delete qualification")
+		return apierror.Internal("failed to delete qualification").WithKey("errors.unknown")
 	}
 
 	logger.WithField("qual_id", id).Info("qualification deleted")
@@ -174,7 +174,7 @@ func (s *QualificationService) ListEmployeeQualifications(ctx context.Context, t
 	empQuals, err := s.empQualRepo.ListByEmployee(ctx, tenantID, employeeID)
 	if err != nil {
 		logger.WithError(err).Error("failed to list employee qualifications")
-		return nil, apierror.Internal("failed to list qualifications")
+		return nil, apierror.Internal("failed to list qualifications").WithKey("errors.unknown")
 	}
 
 	logger.WithFields(logrus.Fields{
@@ -203,11 +203,11 @@ func (s *QualificationService) AddEmployeeQualification(ctx context.Context, ten
 	qual, err := s.qualRepo.GetByID(ctx, tenantID, req.QualificationID)
 	if err != nil {
 		logger.WithError(err).Error("failed to get qualification")
-		return nil, apierror.Internal("failed to get qualification")
+		return nil, apierror.Internal("failed to get qualification").WithKey("errors.unknown")
 	}
 	if qual == nil {
 		logger.WithField("qualification_id", req.QualificationID).Warn("qualification not found")
-		return nil, apierror.NotFound("qualification", req.QualificationID.String())
+		return nil, apierror.NotFound("qualification", req.QualificationID.String()).WithKey("errors.unknown")
 	}
 
 	var issueDate, expiryDate *time.Time
@@ -215,7 +215,7 @@ func (s *QualificationService) AddEmployeeQualification(ctx context.Context, ten
 	if req.IssueDate != nil {
 		t, err := time.Parse("2006-01-02", *req.IssueDate)
 		if err != nil {
-			return nil, apierror.BadRequest("invalid issue_date format (expected YYYY-MM-DD)")
+			return nil, apierror.BadRequest("invalid issue_date format (expected YYYY-MM-DD)").WithKey("errors.invalidInput")
 		}
 		issueDate = &t
 	}
@@ -223,7 +223,7 @@ func (s *QualificationService) AddEmployeeQualification(ctx context.Context, ten
 	if req.ExpiryDate != nil {
 		t, err := time.Parse("2006-01-02", *req.ExpiryDate)
 		if err != nil {
-			return nil, apierror.BadRequest("invalid expiry_date format (expected YYYY-MM-DD)")
+			return nil, apierror.BadRequest("invalid expiry_date format (expected YYYY-MM-DD)").WithKey("errors.invalidInput")
 		}
 		expiryDate = &t
 	}
@@ -244,7 +244,7 @@ func (s *QualificationService) AddEmployeeQualification(ctx context.Context, ten
 
 	if err := s.empQualRepo.Create(ctx, empQual); err != nil {
 		logger.WithError(err).Error("failed to create employee qualification")
-		return nil, apierror.Internal("failed to create qualification")
+		return nil, apierror.Internal("failed to create qualification").WithKey("errors.unknown")
 	}
 
 	logger.WithFields(logrus.Fields{
@@ -269,7 +269,7 @@ func (s *QualificationService) UpdateEmployeeQualification(ctx context.Context, 
 	empQual, err := s.empQualRepo.ListByEmployee(ctx, tenantID, uuid.Nil)
 	if err != nil {
 		logger.WithError(err).Error("failed to list employee qualifications")
-		return nil, apierror.Internal("failed to get qualification")
+		return nil, apierror.Internal("failed to get qualification").WithKey("errors.unknown")
 	}
 
 	var found *model.EmployeeQualification
@@ -281,13 +281,13 @@ func (s *QualificationService) UpdateEmployeeQualification(ctx context.Context, 
 	}
 	if found == nil {
 		logger.WithField("eq_id", id).Warn("employee qualification not found")
-		return nil, apierror.NotFound("qualification", id.String())
+		return nil, apierror.NotFound("qualification", id.String()).WithKey("errors.unknown")
 	}
 
 	if req.IssueDate != nil {
 		t, err := time.Parse("2006-01-02", *req.IssueDate)
 		if err != nil {
-			return nil, apierror.BadRequest("invalid issue_date format (expected YYYY-MM-DD)")
+			return nil, apierror.BadRequest("invalid issue_date format (expected YYYY-MM-DD)").WithKey("errors.invalidInput")
 		}
 		found.IssueDate = &t
 	}
@@ -295,7 +295,7 @@ func (s *QualificationService) UpdateEmployeeQualification(ctx context.Context, 
 	if req.ExpiryDate != nil {
 		t, err := time.Parse("2006-01-02", *req.ExpiryDate)
 		if err != nil {
-			return nil, apierror.BadRequest("invalid expiry_date format (expected YYYY-MM-DD)")
+			return nil, apierror.BadRequest("invalid expiry_date format (expected YYYY-MM-DD)").WithKey("errors.invalidInput")
 		}
 		found.ExpiryDate = &t
 	}
@@ -312,7 +312,7 @@ func (s *QualificationService) UpdateEmployeeQualification(ctx context.Context, 
 
 	if err := s.empQualRepo.Update(ctx, found); err != nil {
 		logger.WithError(err).Error("failed to update employee qualification")
-		return nil, apierror.Internal("failed to update qualification")
+		return nil, apierror.Internal("failed to update qualification").WithKey("errors.unknown")
 	}
 
 	logger.WithField("eq_id", found.ID).Info("employee qualification updated")
@@ -339,7 +339,7 @@ func (s *QualificationService) RemoveEmployeeQualification(ctx context.Context, 
 
 	if err := s.empQualRepo.Delete(ctx, tenantID, id); err != nil {
 		logger.WithError(err).Error("failed to delete employee qualification")
-		return apierror.Internal("failed to delete qualification")
+		return apierror.Internal("failed to delete qualification").WithKey("errors.unknown")
 	}
 
 	logger.WithField("eq_id", id).Info("employee qualification removed")
@@ -358,7 +358,7 @@ func (s *QualificationService) ListExpiringQualifications(ctx context.Context, t
 	expiring, err := s.empQualRepo.ListExpiringWithinDays(ctx, tenantID, days)
 	if err != nil {
 		logger.WithError(err).Error("failed to list expiring qualifications")
-		return nil, apierror.Internal("failed to list qualifications")
+		return nil, apierror.Internal("failed to list qualifications").WithKey("errors.unknown")
 	}
 
 	logger.WithFields(logrus.Fields{
@@ -390,7 +390,7 @@ func (s *QualificationService) ValidateAssignmentQualification(ctx context.Conte
 	hasQual, err := s.empQualRepo.HasValidQualification(ctx, tenantID, employeeID, *requiredQualID)
 	if err != nil {
 		logger.WithError(err).Error("failed to check qualification")
-		return apierror.Internal("failed to check qualification")
+		return apierror.Internal("failed to check qualification").WithKey("errors.unknown")
 	}
 
 	if !hasQual {
@@ -398,7 +398,7 @@ func (s *QualificationService) ValidateAssignmentQualification(ctx context.Conte
 			"employee_id": employeeID,
 			"qual_id":     *requiredQualID,
 		}).Warn("assignment rejected: employee missing required qualification")
-		return apierror.ValidationError("qualification_required", "employee does not have required qualification")
+		return apierror.ValidationError("qualification_required", "employee does not have required qualification").WithKey("errors.conflict")
 	}
 
 	logger.WithFields(logrus.Fields{

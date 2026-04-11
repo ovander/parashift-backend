@@ -154,6 +154,8 @@ func (e *RuleEngine) run(ctx context.Context, rule *model.Rule, input Evaluation
 	} else {
 		base.Status = model.RuleStatusFail
 		base.Message = out.Message
+		base.Key    = out.Key
+		base.Params = out.Params
 	}
 	return base
 }
