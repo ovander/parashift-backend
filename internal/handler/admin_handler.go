@@ -110,7 +110,7 @@ func (h *AdminHandler) ListAuditLogsForTenant(w http.ResponseWriter, r *http.Req
 	}
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid tenant_id"))
+		pkg.WriteError(w, apierror.BadRequest("invalid tenant_id").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -145,7 +145,7 @@ func parseAuditFilter(r *http.Request) (service.AuditLogFilter, error) {
 	if storeIDStr := q.Get("store_id"); storeIDStr != "" {
 		id, err := uuid.Parse(storeIDStr)
 		if err != nil {
-			return filter, apierror.BadRequest("invalid 'store_id' (must be a UUID)")
+			return filter, apierror.BadRequest("invalid 'store_id' (must be a UUID)").WithKey("errors.invalidInput")
 		}
 		filter.StoreID = &id
 	}
@@ -155,7 +155,7 @@ func parseAuditFilter(r *http.Request) (service.AuditLogFilter, error) {
 		if err != nil {
 			t, err = time.Parse(time.RFC3339, fromStr)
 			if err != nil {
-				return filter, apierror.BadRequest("invalid 'from' date (use YYYY-MM-DD)")
+				return filter, apierror.BadRequest("invalid 'from' date (use YYYY-MM-DD)").WithKey("errors.invalidInput")
 			}
 		}
 		filter.From = &t
@@ -165,7 +165,7 @@ func parseAuditFilter(r *http.Request) (service.AuditLogFilter, error) {
 		if err != nil {
 			t, err = time.Parse(time.RFC3339, toStr)
 			if err != nil {
-				return filter, apierror.BadRequest("invalid 'to' date (use YYYY-MM-DD)")
+				return filter, apierror.BadRequest("invalid 'to' date (use YYYY-MM-DD)").WithKey("errors.invalidInput")
 			}
 		}
 		// Extend to end of day so "to=2026-04-07" includes all events that day.

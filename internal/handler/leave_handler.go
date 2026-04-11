@@ -32,12 +32,12 @@ func (h *LeaveHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -47,7 +47,7 @@ func (h *LeaveHandler) Create(w http.ResponseWriter, r *http.Request) {
 		dto.CreateLeaveRequest
 	}
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -77,12 +77,12 @@ func (h *LeaveHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -121,18 +121,18 @@ func (h *LeaveHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	leaveID, err := uuid.Parse(chi.URLParam(r, "leaveId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid leave request ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid leave request ID").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -153,18 +153,18 @@ func (h *LeaveHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	leaveID, err := uuid.Parse(chi.URLParam(r, "leaveId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid leave request ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid leave request ID").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -184,17 +184,17 @@ func (h *LeaveHandler) GetImpact(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	leaveID, err := uuid.Parse(chi.URLParam(r, "leaveId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid leave request ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid leave request ID").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -214,25 +214,25 @@ func (h *LeaveHandler) Review(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	leaveID, err := uuid.Parse(chi.URLParam(r, "leaveId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid leave request ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid leave request ID").WithKey("errors.invalidInput"))
 		return
 	}
 
 	// Decode canonical DTO: Status string (approved|rejected)
 	var req dto.ReviewLeaveRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -254,18 +254,18 @@ func (h *LeaveHandler) ListByEmployee(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	employeeID, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 

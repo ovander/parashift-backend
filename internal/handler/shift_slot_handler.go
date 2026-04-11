@@ -30,11 +30,11 @@ func (h *ShiftSlotHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -57,17 +57,17 @@ func (h *ShiftSlotHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	var req dto.CreateShiftSlotRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -86,17 +86,17 @@ func (h *ShiftSlotHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	slotID, err := uuid.Parse(chi.URLParam(r, "templateId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid slot ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid slot ID").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -115,17 +115,17 @@ func (h *ShiftSlotHandler) Publish(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	slotID, err := uuid.Parse(chi.URLParam(r, "templateId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid slot ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid slot ID").WithKey("errors.invalidInput"))
 		return
 	}
 

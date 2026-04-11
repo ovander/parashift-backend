@@ -56,7 +56,7 @@ func (h *ManagerEmployeeHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	id, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
@@ -77,12 +77,12 @@ func (h *ManagerEmployeeHandler) Create(w http.ResponseWriter, r *http.Request) 
 
 	var req dto.CreateEmployeeRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 	// Manager cannot create other managers — restrict to employee position.
 	if req.Position == "manager" && ctxutil.GetUserRole(ctx) != "admin" {
-		pkg.WriteError(w, apierror.Forbidden("managers cannot create other managers"))
+		pkg.WriteError(w, apierror.Forbidden("managers cannot create other managers").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -103,18 +103,18 @@ func (h *ManagerEmployeeHandler) Update(w http.ResponseWriter, r *http.Request) 
 
 	id, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
 	var req dto.UpdateEmployeeRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 	// Prevent managers from promoting employees to manager.
 	if req.Position != nil && *req.Position == "manager" && ctxutil.GetUserRole(ctx) != "admin" {
-		pkg.WriteError(w, apierror.Forbidden("managers cannot promote employees to manager"))
+		pkg.WriteError(w, apierror.Forbidden("managers cannot promote employees to manager").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -135,7 +135,7 @@ func (h *ManagerEmployeeHandler) Delete(w http.ResponseWriter, r *http.Request) 
 
 	id, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 

@@ -33,24 +33,24 @@ func (h *AvailabilityHandler) SetAvailability(w http.ResponseWriter, r *http.Req
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	employeeID, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
 	var req dto.SetAvailabilityRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -70,30 +70,30 @@ func (h *AvailabilityHandler) GetAvailability(w http.ResponseWriter, r *http.Req
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	employeeID, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
 	dateStr := r.URL.Query().Get("date")
 	if dateStr == "" {
-		pkg.WriteError(w, apierror.BadRequest("date query parameter is required"))
+		pkg.WriteError(w, apierror.BadRequest("date query parameter is required").WithKey("errors.invalidInput"))
 		return
 	}
 
 	date, err := parseDate(dateStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid date format, use YYYY-MM-DD").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -114,18 +114,18 @@ func (h *AvailabilityHandler) ListAvailability(w http.ResponseWriter, r *http.Re
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	employeeID, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
@@ -133,19 +133,19 @@ func (h *AvailabilityHandler) ListAvailability(w http.ResponseWriter, r *http.Re
 	toStr := r.URL.Query().Get("to")
 
 	if fromStr == "" || toStr == "" {
-		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required"))
+		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required").WithKey("errors.missingParams"))
 		return
 	}
 
 	from, err := parseDate(fromStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
 	to, err := parseDate(toStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 

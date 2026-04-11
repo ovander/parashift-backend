@@ -30,11 +30,11 @@ func (h *RuleHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -58,17 +58,17 @@ func (h *RuleHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	ruleID, err := uuid.Parse(chi.URLParam(r, "ruleId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid rule ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid rule ID").WithKey("errors.invalidRuleId"))
 		return
 	}
 
@@ -87,17 +87,17 @@ func (h *RuleHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	var req dto.CreateRuleRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -116,23 +116,23 @@ func (h *RuleHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	ruleID, err := uuid.Parse(chi.URLParam(r, "ruleId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid rule ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid rule ID").WithKey("errors.invalidRuleId"))
 		return
 	}
 
 	var req dto.UpdateRuleRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -151,17 +151,17 @@ func (h *RuleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	ruleID, err := uuid.Parse(chi.URLParam(r, "ruleId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid rule ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid rule ID").WithKey("errors.invalidRuleId"))
 		return
 	}
 

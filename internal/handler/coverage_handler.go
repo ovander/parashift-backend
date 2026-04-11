@@ -31,12 +31,12 @@ func (h *CoverageHandler) ListRequirements(w http.ResponseWriter, r *http.Reques
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -62,19 +62,19 @@ func (h *CoverageHandler) CreateRequirement(w http.ResponseWriter, r *http.Reque
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	// Decode canonical DTO: DayOfWeek int, StartTime/EndTime string, MinStaff int, RequiredRole *string
 	var req dto.CoverageRequirementRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -95,24 +95,24 @@ func (h *CoverageHandler) UpdateRequirement(w http.ResponseWriter, r *http.Reque
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	reqID, err := uuid.Parse(chi.URLParam(r, "reqId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid requirement ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid requirement ID").WithKey("errors.invalidInput"))
 		return
 	}
 
 	var req dto.CoverageRequirementRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -133,18 +133,18 @@ func (h *CoverageHandler) DeleteRequirement(w http.ResponseWriter, r *http.Reque
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	reqID, err := uuid.Parse(chi.URLParam(r, "reqId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid requirement ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid requirement ID").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -164,12 +164,12 @@ func (h *CoverageHandler) GetCoverage(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -177,19 +177,19 @@ func (h *CoverageHandler) GetCoverage(w http.ResponseWriter, r *http.Request) {
 	toStr := r.URL.Query().Get("to")
 
 	if fromStr == "" || toStr == "" {
-		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required"))
+		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required").WithKey("errors.missingParams"))
 		return
 	}
 
 	from, err := parseDate(fromStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
 	to, err := parseDate(toStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
@@ -210,12 +210,12 @@ func (h *CoverageHandler) GetGaps(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -223,19 +223,19 @@ func (h *CoverageHandler) GetGaps(w http.ResponseWriter, r *http.Request) {
 	toStr := r.URL.Query().Get("to")
 
 	if fromStr == "" || toStr == "" {
-		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required"))
+		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required").WithKey("errors.missingParams"))
 		return
 	}
 
 	from, err := parseDate(fromStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
 	to, err := parseDate(toStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 

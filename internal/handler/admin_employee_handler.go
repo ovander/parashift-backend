@@ -64,7 +64,7 @@ func (h *AdminEmployeeHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
@@ -84,11 +84,11 @@ func (h *AdminEmployeeHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req dto.CreateEmployeeRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 	if req.StoreID == nil {
-		pkg.WriteError(w, apierror.BadRequest("store_id is required"))
+		pkg.WriteError(w, apierror.BadRequest("store_id is required").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -107,13 +107,13 @@ func (h *AdminEmployeeHandler) Update(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
 	var req dto.UpdateEmployeeRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -132,7 +132,7 @@ func (h *AdminEmployeeHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 

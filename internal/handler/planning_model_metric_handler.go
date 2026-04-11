@@ -32,18 +32,18 @@ func (h *PlanningModelMetricHandler) GetMetrics(w http.ResponseWriter, r *http.R
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	scheme := chi.URLParam(r, "scheme")
 	if scheme == "" {
-		pkg.WriteError(w, apierror.BadRequest("scheme parameter required"))
+		pkg.WriteError(w, apierror.BadRequest("scheme parameter required").WithKey("errors.invalidInput"))
 		return
 	}
 

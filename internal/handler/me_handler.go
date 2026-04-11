@@ -6,6 +6,7 @@ import (
 	"github.com/ovander/backendkit/apierror"
 	"github.com/ovander/backendkit/ctxutil"
 	"github.com/ovander/backendkit/pagination"
+	"github.com/ovander/parashift/internal/dto"
 	"github.com/ovander/parashift/internal/pkg"
 	"github.com/ovander/parashift/internal/service"
 )
@@ -33,6 +34,12 @@ type MeResponse struct {
 	Position string  `json:"position"` // "admin" | "manager" | "employee" — RBAC access level
 	JobRole  string  `json:"job_role"`  // pharmacist|animator|... — shift eligibility
 	StoreID  *string `json:"store_id,omitempty"`
+	Locale   string  `json:"locale"`   // preferred UI locale — "fr" | "en"
+}
+
+// UpdateLocaleRequest is the body for PATCH /me/locale.
+type UpdateLocaleRequest struct {
+	Locale string `json:"locale"` // "fr" | "en"
 }
 
 // GetProfile returns the authenticated user's profile.
@@ -59,6 +66,7 @@ func (h *MeHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 			Name:     name,
 			Email:    userEmail,
 			Position: "admin",
+			Locale:   "fr", // admins default to French; no employee record to read from
 		})
 		return
 	}
@@ -72,6 +80,11 @@ func (h *MeHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	locale := employee.Locale
+	if locale == "" {
+		locale = "fr"
+	}
+
 	storeID := employee.TenantID.String()
 	pkg.WriteJSON(w, http.StatusOK, MeResponse{
 		ID:       employee.ID.String(),
@@ -80,7 +93,47 @@ func (h *MeHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		Position: employee.Position,
 		JobRole:  employee.JobRole,
 		StoreID:  &storeID,
+		Locale:   locale,
 	})
+}
+
+// UpdateLocale persists the authenticated user's preferred UI locale.
+// PATCH /me/locale — body: { "locale": "fr" | "en" }
+func (h *MeHandler) UpdateLocale(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req UpdateLocaleRequest
+	if err := pkg.DecodeJSON(r, &req); err != nil {
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
+		return
+	}
+	if req.Locale != "fr" && req.Locale != "en" {
+		pkg.WriteError(w, apierror.BadRequest("locale must be 'fr' or 'en'").WithKey("errors.invalidInput"))
+		return
+	}
+
+	// Platform admins have no employee record — acknowledge the preference without a DB write.
+	socrateRole := ctxutil.GetUserRole(ctx)
+	if socrateRole == "admin" {
+		pkg.WriteJSON(w, http.StatusOK, map[string]string{"locale": req.Locale})
+		return
+	}
+
+	userSub := ctxutil.GetUserSub(ctx)
+	employee, err := h.empSvc.GetByAuthID(ctx, userSub)
+	if err != nil {
+		pkg.WriteError(w, apierror.NotFound("employee", userSub).WithKey("errors.notFound"))
+		return
+	}
+
+	if _, err := h.empSvc.Update(ctx, employee.TenantID, employee.ID, dto.UpdateEmployeeRequest{
+		Locale: &req.Locale,
+	}); err != nil {
+		pkg.WriteError(w, err)
+		return
+	}
+
+	pkg.WriteJSON(w, http.StatusOK, map[string]string{"locale": req.Locale})
 }
 
 // GetMySchedule returns the authenticated user's assigned shifts for a date range.
@@ -91,7 +144,7 @@ func (h *MeHandler) GetMySchedule(w http.ResponseWriter, r *http.Request) {
 
 	employee, err := h.empSvc.GetByAuthID(ctx, userSub)
 	if err != nil {
-		pkg.WriteError(w, apierror.NotFound("employee", userSub))
+		pkg.WriteError(w, apierror.NotFound("employee", userSub).WithKey("errors.notFound"))
 		return
 	}
 
@@ -99,19 +152,19 @@ func (h *MeHandler) GetMySchedule(w http.ResponseWriter, r *http.Request) {
 	toStr := r.URL.Query().Get("to")
 
 	if fromStr == "" || toStr == "" {
-		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required"))
+		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required").WithKey("errors.missingParams"))
 		return
 	}
 
 	from, err := parseDate(fromStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
 	to, err := parseDate(toStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
@@ -134,7 +187,7 @@ func (h *MeHandler) ExportICS(w http.ResponseWriter, r *http.Request) {
 
 	employee, err := h.empSvc.GetByAuthID(ctx, userSub)
 	if err != nil {
-		pkg.WriteError(w, apierror.NotFound("employee", userSub))
+		pkg.WriteError(w, apierror.NotFound("employee", userSub).WithKey("errors.notFound"))
 		return
 	}
 
@@ -142,19 +195,19 @@ func (h *MeHandler) ExportICS(w http.ResponseWriter, r *http.Request) {
 	toStr := r.URL.Query().Get("to")
 
 	if fromStr == "" || toStr == "" {
-		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required"))
+		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required").WithKey("errors.missingParams"))
 		return
 	}
 
 	from, err := parseDate(fromStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
 	to, err := parseDate(toStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 

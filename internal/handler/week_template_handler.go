@@ -30,18 +30,18 @@ func (h *WeekTemplateHandler) GetTemplates(w http.ResponseWriter, r *http.Reques
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	employeeID, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
@@ -62,30 +62,30 @@ func (h *WeekTemplateHandler) UpsertTemplates(w http.ResponseWriter, r *http.Req
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	employeeID, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
 	// Decode canonical DTO: Templates []WeekTemplateEntry
 	var req dto.UpsertWeekTemplateRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
 	if len(req.Templates) == 0 {
-		pkg.WriteError(w, apierror.BadRequest("templates cannot be empty"))
+		pkg.WriteError(w, apierror.BadRequest("templates cannot be empty").WithKey("errors.invalidInput"))
 		return
 	}
 

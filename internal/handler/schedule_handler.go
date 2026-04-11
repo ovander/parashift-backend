@@ -103,12 +103,12 @@ func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -116,19 +116,19 @@ func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 	toStr := r.URL.Query().Get("to")
 
 	if fromStr == "" || toStr == "" {
-		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required"))
+		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required").WithKey("errors.missingParams"))
 		return
 	}
 
 	from, err := parseDate(fromStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
 	to, err := parseDate(toStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
@@ -179,17 +179,17 @@ func (h *ScheduleHandler) ListShifts(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	from, to, err := weekOf(r)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest(err.Error()))
+		pkg.WriteError(w, apierror.BadRequest(err.Error()).WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -229,17 +229,17 @@ func (h *ScheduleHandler) ListAssignments(w http.ResponseWriter, r *http.Request
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	from, to, err := weekOf(r)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest(err.Error()))
+		pkg.WriteError(w, apierror.BadRequest(err.Error()).WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -275,19 +275,19 @@ func (h *ScheduleHandler) CreateShift(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	// Decode canonical DTO: Date time.Time, StartTime/EndTime string (HH:MM), Role *string, Source *string, etc.
 	var req dto.CreateShiftInstanceRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -308,18 +308,18 @@ func (h *ScheduleHandler) GetShift(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	shiftID, err := uuid.Parse(chi.URLParam(r, "shiftId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid shift ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid shift ID").WithKey("errors.invalidShiftId"))
 		return
 	}
 
@@ -340,25 +340,25 @@ func (h *ScheduleHandler) UpdateShift(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	shiftID, err := uuid.Parse(chi.URLParam(r, "shiftId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid shift ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid shift ID").WithKey("errors.invalidShiftId"))
 		return
 	}
 
 	// Decode canonical DTO: all fields optional (*string, *time.Time, *uuid.UUID)
 	var req dto.UpdateShiftInstanceRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -379,18 +379,18 @@ func (h *ScheduleHandler) DeleteShift(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	shiftID, err := uuid.Parse(chi.URLParam(r, "shiftId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid shift ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid shift ID").WithKey("errors.invalidShiftId"))
 		return
 	}
 
@@ -410,12 +410,12 @@ func (h *ScheduleHandler) GenerateSchedule(w http.ResponseWriter, r *http.Reques
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -425,22 +425,22 @@ func (h *ScheduleHandler) GenerateSchedule(w http.ResponseWriter, r *http.Reques
 		DateTo   string `json:"date_to"`
 	}
 	if err := pkg.DecodeJSON(r, &body); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 	if body.DateFrom == "" || body.DateTo == "" {
-		pkg.WriteError(w, apierror.BadRequest("date_from and date_to are required (YYYY-MM-DD)"))
+		pkg.WriteError(w, apierror.BadRequest("date_from and date_to are required (YYYY-MM-DD)").WithKey("errors.invalidInput"))
 		return
 	}
 
 	dateFrom, err := parseDate(body.DateFrom)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid date_from, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid date_from, use YYYY-MM-DD").WithKey("errors.invalidInput"))
 		return
 	}
 	dateTo, err := parseDate(body.DateTo)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid date_to, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid date_to, use YYYY-MM-DD").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -466,24 +466,24 @@ func (h *ScheduleHandler) CreateAssignment(w http.ResponseWriter, r *http.Reques
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	// Decode canonical DTO: ShiftInstanceID uuid.UUID, EmployeeID uuid.UUID, Status *string
 	var req dto.CreateAssignmentRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
 	if req.ShiftID == uuid.Nil || req.EmployeeID == uuid.Nil {
-		pkg.WriteError(w, apierror.BadRequest("shift_id and employee_id are required"))
+		pkg.WriteError(w, apierror.BadRequest("shift_id and employee_id are required").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -505,6 +505,8 @@ func (h *ScheduleHandler) CreateAssignment(w http.ResponseWriter, r *http.Reques
 			RuleType:   v.RuleType,
 			Severity:   v.Severity,
 			Message:    v.Message,
+			Key:        v.Key,
+			Params:     v.Params,
 			ShiftID:    assignment.ShiftInstanceID,
 			EmployeeID: assignment.EmployeeID,
 		}
@@ -533,18 +535,18 @@ func (h *ScheduleHandler) GetAssignments(w http.ResponseWriter, r *http.Request)
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	shiftID, err := uuid.Parse(chi.URLParam(r, "shiftId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid shift ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid shift ID").WithKey("errors.invalidShiftId"))
 		return
 	}
 
@@ -571,37 +573,37 @@ func (h *ScheduleHandler) ListEmployeeSchedule(w http.ResponseWriter, r *http.Re
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	employeeID, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid employee ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
 	fromStr := r.URL.Query().Get("from")
 	toStr := r.URL.Query().Get("to")
 	if fromStr == "" || toStr == "" {
-		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required"))
+		pkg.WriteError(w, apierror.BadRequest("from and to query parameters are required").WithKey("errors.missingParams"))
 		return
 	}
 
 	from, err := parseDate(fromStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
 	to, err := parseDate(toStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
@@ -627,12 +629,12 @@ func (h *ScheduleHandler) PublishSchedule(w http.ResponseWriter, r *http.Request
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -641,19 +643,19 @@ func (h *ScheduleHandler) PublishSchedule(w http.ResponseWriter, r *http.Request
 		To   string `json:"to"`
 	}
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 
 	from, err := parseDate(req.From)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid from date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
 	to, err := parseDate(req.To)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD"))
+		pkg.WriteError(w, apierror.BadRequest("invalid to date format, use YYYY-MM-DD").WithKey("errors.invalidDateRange"))
 		return
 	}
 
@@ -674,18 +676,18 @@ func (h *ScheduleHandler) DeleteAssignment(w http.ResponseWriter, r *http.Reques
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	assignmentID, err := uuid.Parse(chi.URLParam(r, "assignmentId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid assignment ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid assignment ID").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -706,24 +708,24 @@ func (h *ScheduleHandler) ResetWeekAssignments(w http.ResponseWriter, r *http.Re
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	weekOfStr := r.URL.Query().Get("week_of")
 	if weekOfStr == "" {
-		pkg.WriteError(w, apierror.BadRequest("week_of query parameter is required (YYYY-MM-DD)"))
+		pkg.WriteError(w, apierror.BadRequest("week_of query parameter is required (YYYY-MM-DD)").WithKey("errors.invalidInput"))
 		return
 	}
 
 	weekStart, err := time.Parse("2006-01-02", weekOfStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("week_of must be in YYYY-MM-DD format"))
+		pkg.WriteError(w, apierror.BadRequest("week_of must be in YYYY-MM-DD format").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -747,23 +749,23 @@ func (h *ScheduleHandler) RegenerateWeek(w http.ResponseWriter, r *http.Request)
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	weekOfStr := r.URL.Query().Get("week_of")
 	if weekOfStr == "" {
-		pkg.WriteError(w, apierror.BadRequest("week_of query parameter is required"))
+		pkg.WriteError(w, apierror.BadRequest("week_of query parameter is required").WithKey("errors.invalidInput"))
 		return
 	}
 
 	weekStart, err := time.Parse("2006-01-02", weekOfStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("week_of must be in YYYY-MM-DD format"))
+		pkg.WriteError(w, apierror.BadRequest("week_of must be in YYYY-MM-DD format").WithKey("errors.invalidInput"))
 		return
 	}
 

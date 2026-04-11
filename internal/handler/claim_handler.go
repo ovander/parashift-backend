@@ -30,13 +30,13 @@ func (h *ClaimHandler) Claim(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	token := chi.URLParam(r, "token")
 	if token == "" {
-		pkg.WriteError(w, apierror.BadRequest("missing claim token"))
+		pkg.WriteError(w, apierror.BadRequest("missing claim token").WithKey("errors.invalidInput"))
 		return
 	}
 
 	sub := ctxutil.GetUserSub(ctx)
 	if sub == "" {
-		pkg.WriteError(w, apierror.Unauthorized("missing user identity"))
+		pkg.WriteError(w, apierror.Unauthorized("missing user identity").WithKey("errors.accessDenied"))
 		return
 	}
 

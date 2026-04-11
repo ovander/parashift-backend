@@ -60,7 +60,7 @@ func (h *AdminManagerHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := uuid.Parse(chi.URLParam(r, "managerId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid manager ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid manager ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
@@ -70,7 +70,7 @@ func (h *AdminManagerHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if emp.Position != "manager" {
-		pkg.WriteError(w, apierror.NotFound("manager", id.String()))
+		pkg.WriteError(w, apierror.NotFound("manager", id.String()).WithKey("errors.notFound"))
 		return
 	}
 	pkg.WriteJSON(w, http.StatusOK, toEmployeeResponse(emp))
@@ -85,11 +85,11 @@ func (h *AdminManagerHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req dto.CreateEmployeeRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 	if req.StoreID == nil {
-		pkg.WriteError(w, apierror.BadRequest("store_id is required"))
+		pkg.WriteError(w, apierror.BadRequest("store_id is required").WithKey("errors.invalidInput"))
 		return
 	}
 	// Always manager position.
@@ -110,13 +110,13 @@ func (h *AdminManagerHandler) Update(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := uuid.Parse(chi.URLParam(r, "managerId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid manager ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid manager ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
 	var req dto.UpdateEmployeeRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid request body"))
+		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
 	// Prevent position demotion via this endpoint.
@@ -138,7 +138,7 @@ func (h *AdminManagerHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := uuid.Parse(chi.URLParam(r, "managerId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid manager ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid manager ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 
@@ -161,7 +161,7 @@ func (h *AdminManagerHandler) ResendInvite(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	id, err := uuid.Parse(chi.URLParam(r, "managerId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid manager ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid manager ID").WithKey("errors.invalidEmployeeId"))
 		return
 	}
 

@@ -39,7 +39,7 @@ func (h *PublicHolidayHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	year, err := strconv.Atoi(yearStr)
 	if err != nil || year < 2000 || year > 2100 {
-		pkg.WriteError(w, apierror.BadRequest("year must be a valid 4-digit year (e.g. 2026)"))
+		pkg.WriteError(w, apierror.BadRequest("year must be a valid 4-digit year (e.g. 2026)").WithKey("errors.invalidInput"))
 		return
 	}
 

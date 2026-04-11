@@ -33,18 +33,18 @@ func (h *AIHandler) SuggestAssignment(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	shiftIDStr := r.URL.Query().Get("shift_id")
 	shiftID, err := uuid.Parse(shiftIDStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("shift_id query param is required and must be a valid UUID"))
+		pkg.WriteError(w, apierror.BadRequest("shift_id query param is required and must be a valid UUID").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -64,33 +64,33 @@ func (h *AIHandler) OptimizeSchedule(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	fromStr := r.URL.Query().Get("from")
 	toStr := r.URL.Query().Get("to")
 	if fromStr == "" || toStr == "" {
-		pkg.WriteError(w, apierror.BadRequest("'from' and 'to' query params are required (YYYY-MM-DD)"))
+		pkg.WriteError(w, apierror.BadRequest("'from' and 'to' query params are required (YYYY-MM-DD)").WithKey("errors.invalidInput"))
 		return
 	}
 
 	from, err := time.Parse("2006-01-02", fromStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("'from' must be in YYYY-MM-DD format"))
+		pkg.WriteError(w, apierror.BadRequest("'from' must be in YYYY-MM-DD format").WithKey("errors.invalidInput"))
 		return
 	}
 	to, err := time.Parse("2006-01-02", toStr)
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("'to' must be in YYYY-MM-DD format"))
+		pkg.WriteError(w, apierror.BadRequest("'to' must be in YYYY-MM-DD format").WithKey("errors.invalidInput"))
 		return
 	}
 	if to.Before(from) {
-		pkg.WriteError(w, apierror.BadRequest("'to' must be on or after 'from'"))
+		pkg.WriteError(w, apierror.BadRequest("'to' must be on or after 'from'").WithKey("errors.invalidInput"))
 		return
 	}
 
@@ -110,11 +110,11 @@ func (h *AIHandler) ListInsights(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
@@ -140,17 +140,17 @@ func (h *AIHandler) DismissInsight(w http.ResponseWriter, r *http.Request) {
 
 	storeID, err := uuid.Parse(chi.URLParam(r, "storeId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid store ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid store ID").WithKey("errors.invalidStoreId"))
 		return
 	}
 	if !validateStoreTenant(tenantID, storeID, ctxutil.GetUserRole(ctx)) {
-		pkg.WriteError(w, apierror.Forbidden("access denied to this store"))
+		pkg.WriteError(w, apierror.Forbidden("access denied to this store").WithKey("errors.accessDenied"))
 		return
 	}
 
 	insightID, err := uuid.Parse(chi.URLParam(r, "insightId"))
 	if err != nil {
-		pkg.WriteError(w, apierror.BadRequest("invalid insight ID"))
+		pkg.WriteError(w, apierror.BadRequest("invalid insight ID").WithKey("errors.invalidInsightId"))
 		return
 	}
 
