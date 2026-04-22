@@ -1,19 +1,34 @@
 #!/bin/bash
 set -euo pipefail
 
+# ==============================
+# CONFIG
+# ==============================
 SSH_USER="olivier"
 SSH_HOST="vandermoten.eu"
 SSH_PORT="2222"
 REMOTE="${SSH_USER}@${SSH_HOST}"
 
+APP_NAME="parashift"
+
 VERSION="${1:-$(git describe --tags --always --dirty 2>/dev/null || echo "dev")}"
 COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
 BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-BIN_NAME="parashift-${VERSION}"
+BIN_NAME="${APP_NAME}-${VERSION}"
 LOCAL_BIN="/tmp/${BIN_NAME}"
-REMOTE_BIN="/tmp/parashift-app"
-REMOTE_MIGRATIONS="/tmp/migrations"
+
+REMOTE_TMP_DIR="/tmp/${APP_NAME}"
+REMOTE_BIN="${REMOTE_TMP_DIR}/app"
+REMOTE_MIGRATIONS="${REMOTE_TMP_DIR}/migrations"
+
+# ==============================
+# GUARD
+# ==============================
+if [[ "${VERSION}" == *"-dirty"* ]]; then
+  echo "❌ Working tree is dirty. Commit your changes before deploying."
+  exit 1
+fi
 
 echo "=============================="
 echo "🔨 Building ${BIN_NAME}"
@@ -44,7 +59,6 @@ if [ ! -f "${LOCAL_BIN}" ]; then
 fi
 
 chmod +x "${LOCAL_BIN}"
-
 echo "✔ Binary built: ${LOCAL_BIN}"
 
 # -----------------------------
@@ -53,6 +67,16 @@ echo "✔ Binary built: ${LOCAL_BIN}"
 echo "🔐 Generating checksum..."
 CHECKSUM=$(shasum -a 256 "${LOCAL_BIN}" | awk '{print $1}')
 echo "Checksum: ${CHECKSUM}"
+
+# -----------------------------
+# PREPARE REMOTE TMP
+# -----------------------------
+echo "📁 Preparing remote tmp directory..."
+
+ssh -p ${SSH_PORT} ${REMOTE} "
+rm -rf ${REMOTE_TMP_DIR}
+mkdir -p ${REMOTE_TMP_DIR}
+"
 
 # -----------------------------
 # UPLOAD BINARY
@@ -87,6 +111,8 @@ rm -f "${LOCAL_BIN}"
 echo ""
 echo "=============================="
 echo "✅ READY TO DEPLOY"
-echo "Run on VPS:"
-echo "cd /opt/apps/parashift && sudo ./deploy.sh"
+echo ""
+echo "ssh -p ${SSH_PORT} ${REMOTE}"
+echo "cd /opt/apps/parashift"
+echo "sudo ./deploy.sh ${VERSION}"
 echo "=============================="
