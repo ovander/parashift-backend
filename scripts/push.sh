@@ -18,7 +18,7 @@ BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 BIN_NAME="${APP_NAME}-${VERSION}"
 LOCAL_BIN="/tmp/${BIN_NAME}"
 
-REMOTE_TMP_DIR="/tmp/${APP_NAME}"
+REMOTE_TMP_DIR="/tmp/${APP_NAME}-backend"
 REMOTE_BIN="${REMOTE_TMP_DIR}/app"
 REMOTE_MIGRATIONS="${REMOTE_TMP_DIR}/migrations"
 
@@ -30,16 +30,16 @@ if [[ "${VERSION}" == *"-dirty"* ]]; then
   exit 1
 fi
 
+# ==============================
+# BUILD
+# ==============================
 echo "=============================="
 echo "🔨 Building ${BIN_NAME}"
-echo "Version: ${VERSION}"
-echo "Commit: ${COMMIT}"
-echo "Time: ${BUILD_TIME}"
+echo "Version:  ${VERSION}"
+echo "Commit:   ${COMMIT}"
+echo "Time:     ${BUILD_TIME}"
 echo "=============================="
 
-# -----------------------------
-# BUILD
-# -----------------------------
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
   -ldflags="-s -w \
     -X main.version=${VERSION} \
@@ -48,71 +48,66 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
   -o "${LOCAL_BIN}" \
   ./cmd/server
 
-# -----------------------------
+# ==============================
 # VALIDATION
-# -----------------------------
+# ==============================
 echo "🔍 Validating binary..."
 
 if [ ! -f "${LOCAL_BIN}" ]; then
-    echo "❌ Build failed"
-    exit 1
+  echo "❌ Build failed"
+  exit 1
 fi
 
 chmod +x "${LOCAL_BIN}"
 echo "✔ Binary built: ${LOCAL_BIN}"
 
-# -----------------------------
+# ==============================
 # CHECKSUM
-# -----------------------------
+# ==============================
 echo "🔐 Generating checksum..."
 CHECKSUM=$(shasum -a 256 "${LOCAL_BIN}" | awk '{print $1}')
 echo "Checksum: ${CHECKSUM}"
 
-# -----------------------------
-# PREPARE REMOTE TMP
-# -----------------------------
-echo "📁 Preparing remote tmp directory..."
-
-ssh -p ${SSH_PORT} ${REMOTE} "
-rm -rf ${REMOTE_TMP_DIR}
-mkdir -p ${REMOTE_TMP_DIR}
-"
-
-# -----------------------------
+# ==============================
 # UPLOAD BINARY
-# -----------------------------
-echo "📤 Uploading binary..."
+# ==============================
+echo "📁 Preparing remote tmp..."
+ssh -p ${SSH_PORT} ${REMOTE} "rm -rf ${REMOTE_TMP_DIR} && mkdir -p ${REMOTE_TMP_DIR}"
 
+echo "📤 Uploading binary..."
 scp -P ${SSH_PORT} "${LOCAL_BIN}" "${REMOTE}:${REMOTE_BIN}"
 
-# -----------------------------
+# ==============================
 # VERIFY REMOTE
-# -----------------------------
+# ==============================
 echo "🔍 Verifying remote binary..."
+ssh -p ${SSH_PORT} ${REMOTE} "ls -lh ${REMOTE_BIN}"
 
-ssh -p ${SSH_PORT} ${REMOTE} "
-ls -lh ${REMOTE_BIN}
-"
-
-# -----------------------------
+# ==============================
 # UPLOAD MIGRATIONS
-# -----------------------------
+# ==============================
 echo "📁 Uploading migrations..."
-
 rsync -az --delete -e "ssh -p ${SSH_PORT}" \
   migrations/ "${REMOTE}:${REMOTE_MIGRATIONS}/"
 
-# -----------------------------
+# ==============================
 # CLEANUP LOCAL
-# -----------------------------
+# ==============================
 echo "🧹 Cleaning local temp..."
 rm -f "${LOCAL_BIN}"
 
+# ==============================
+# FINAL INSTRUCTIONS
+# ==============================
 echo ""
 echo "=============================="
-echo "✅ READY TO DEPLOY"
+echo "✅ PUSH COMPLETE"
+echo "=============================="
 echo ""
-echo "ssh -p ${SSH_PORT} ${REMOTE}"
-echo "cd /opt/apps/parashift"
-echo "sudo ./deploy.sh ${VERSION}"
+echo "➡️  Next steps on VPS:"
+echo ""
+echo "    ssh -p ${SSH_PORT} ${REMOTE}"
+echo ""
+echo "    sudo /opt/apps/${APP_NAME}/deploy-backend.sh ${VERSION}"
+echo ""
 echo "=============================="
