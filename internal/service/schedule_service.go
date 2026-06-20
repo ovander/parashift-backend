@@ -89,13 +89,20 @@ func (s *ScheduleService) WithStoreExceptionRepo(r repo.StoreExceptionRepository
 
 // checkHoliday returns a non-nil error if date falls on a French public holiday.
 func (s *ScheduleService) checkHoliday(ctx context.Context, date time.Time) error {
-	if s.holidaySvc == nil {
+	return blockIfHoliday(ctx, s.holidaySvc, s.logger, date)
+}
+
+// blockIfHoliday returns a BadRequest error when date is a public holiday. It is
+// a package helper so both ScheduleService (shift create/update) and the
+// assignment service can gate on holidays without duplicating the logic. A nil
+// holidaySvc or a lookup error is non-fatal (the action proceeds).
+func blockIfHoliday(ctx context.Context, holidaySvc *PublicHolidayService, logger *logrus.Entry, date time.Time) error {
+	if holidaySvc == nil {
 		return nil
 	}
-	isHoliday, name, err := s.holidaySvc.IsHoliday(ctx, date, DefaultZone)
+	isHoliday, name, err := holidaySvc.IsHoliday(ctx, date, DefaultZone)
 	if err != nil {
-		// Non-fatal: log and let the action proceed.
-		s.logger.WithError(err).Warn("holiday check failed — proceeding without block")
+		logger.WithError(err).Warn("holiday check failed — proceeding without block")
 		return nil
 	}
 	if isHoliday {
@@ -397,189 +404,45 @@ func (s *ScheduleService) DeleteShift(ctx context.Context, tenantID, id uuid.UUI
 }
 
 // CreateAssignment creates a new shift assignment.
-// CreateAssignment assigns an employee to a shift and runs configured scheduling rules.
-// Returned violations (WARNING/INFO) are advisory; BLOCKING violations cause an error.
+// newAssignmentService builds an assignment service from the service's current
+// dependencies (ARC-1), so it reflects optional deps wired via the With* setters.
+func (s *ScheduleService) newAssignmentService() *assignmentService {
+	return &assignmentService{
+		shiftRepo:  s.shiftRepo,
+		assignRepo: s.assignRepo,
+		empRepo:    s.empRepo,
+		leaveRepo:  s.leaveRepo,
+		ruleEngine: s.ruleEngine,
+		holidaySvc: s.holidaySvc,
+		emitter:    s.emitter,
+		logger:     s.logger,
+	}
+}
+
+// CreateAssignment assigns an employee to a shift and runs configured scheduling
+// rules. Delegated to the extracted assignment service (ARC-1).
 func (s *ScheduleService) CreateAssignment(ctx context.Context, tenantID uuid.UUID, req dto.CreateAssignmentRequest) (*model.ShiftAssignment, []model.RuleViolation, error) {
-	logger := ctxutil.GetLogger(ctx)
-
-	// req.ShiftID and req.EmployeeID are already uuid.UUID from DTO
-	shiftID := req.ShiftID
-	empID := req.EmployeeID
-
-	// Check shift exists in tenant
-	shift, err := s.shiftRepo.GetByID(ctx, tenantID, shiftID)
-	if err != nil {
-		logger.WithError(err).Error("failed to get shift")
-		return nil, nil, apierror.Internal("failed to get shift").WithKey("errors.unknown")
-	}
-	if shift == nil {
-		return nil, nil, apierror.NotFound("shift", shiftID.String()).WithKey("errors.unknown")
-	}
-
-	// Block assignment on French public holidays.
-	if err := s.checkHoliday(ctx, shift.Date); err != nil {
-		return nil, nil, err
-	}
-
-	// Check employee exists in tenant
-	emp, err := s.empRepo.GetByID(ctx, tenantID, empID)
-	if err != nil {
-		logger.WithError(err).Error("failed to get employee")
-		return nil, nil, apierror.Internal("failed to get employee").WithKey("errors.unknown")
-	}
-	if emp == nil {
-		return nil, nil, apierror.NotFound("employee", empID.String()).WithKey("errors.unknown")
-	}
-
-	// Check for assignment conflicts
-	hasConflict, err := s.assignRepo.ExistsConflict(ctx, tenantID, empID, shift.Date, shift.StartTime, shift.EndTime, nil)
-	if err != nil {
-		logger.WithError(err).Error("failed to check assignment conflicts")
-		return nil, nil, apierror.Internal("failed to check conflicts").WithKey("errors.unknown")
-	}
-	if hasConflict {
-		return nil, nil, apierror.Conflict("employee already has an assignment during this time").WithKey("errors.conflict")
-	}
-
-	// Check employee doesn't have active leave on shift date
-	hasLeave, err := s.leaveRepo.HasActiveLeave(ctx, tenantID, empID, shift.Date, shift.Date)
-	if err != nil {
-		logger.WithError(err).Error("failed to check active leave")
-		return nil, nil, apierror.Internal("failed to check leave").WithKey("errors.unknown")
-	}
-	if hasLeave {
-		return nil, nil, apierror.Conflict("employee has active leave during this time").WithKey("errors.conflict")
-	}
-
-	// ── Rule Engine evaluation ──────────────────────────────────────────────
-	var violations []model.RuleViolation
-	if s.ruleEngine != nil {
-		violations, err = s.ruleEngine.EvaluateAssignment(ctx, tenantID, shift, emp)
-		if err != nil {
-			logger.WithError(err).Warn("rule engine evaluation failed, proceeding without checks")
-		} else {
-			// Block on BLOCKING severity violations.
-			for _, v := range violations {
-				if v.Severity == model.RuleSeverityBlocking {
-					key := v.Key
-					if key == "" {
-						key = "errors.ruleViolation"
-					}
-					return nil, violations, apierror.Conflict(v.Message).WithKey(key)
-				}
-			}
-		}
-	}
-
-	// Create assignment — denormalize shift time fields so the rule engine can
-	// calculate real hours without a JOIN on future evaluations.
-	assignment := &model.ShiftAssignment{
-		TenantScoped: model.TenantScoped{
-			ID:        uuid.New(),
-			TenantID:  tenantID,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		},
-		ShiftInstanceID: shiftID,
-		EmployeeID:      empID,
-		Status:          model.AssignmentStatusConfirmed,
-		AssignedBy:      ctxutil.GetUserID(ctx),
-		AssignedAt:      time.Now(),
-		ShiftDate:       shift.Date,
-		ShiftStartTime:  shift.StartTime,
-		ShiftEndTime:    shift.EndTime,
-	}
-
-	if err := s.assignRepo.Create(ctx, assignment); err != nil {
-		logger.WithError(err).Error("failed to create assignment")
-		return nil, nil, apierror.Internal("failed to create assignment").WithKey("errors.unknown")
-	}
-
-	// Publish event
-	s.emitter.Publish(event.Event{
-		Type:     event.TypeAssignmentCreated,
-		TenantID: tenantID,
-		UserID:   ctxutil.GetUserID(ctx),
-		Payload:  assignment,
-	})
-
-	return assignment, violations, nil
+	return s.newAssignmentService().Create(ctx, tenantID, req)
 }
 
 // GetAssignmentsByDateRange retrieves all assignments for a tenant within a date range.
 func (s *ScheduleService) GetAssignmentsByDateRange(ctx context.Context, tenantID uuid.UUID, from, to time.Time) ([]*model.ShiftAssignment, error) {
-	logger := ctxutil.GetLogger(ctx)
-	assignments, err := s.assignRepo.ListByDateRange(ctx, tenantID, from, to)
-	if err != nil {
-		logger.WithError(err).Error("failed to list assignments by date range")
-		return nil, apierror.Internal("failed to list assignments").WithKey("errors.unknown")
-	}
-	return assignments, nil
+	return s.newAssignmentService().ListByDateRange(ctx, tenantID, from, to)
 }
 
 // GetAssignments retrieves all assignments for a shift.
 func (s *ScheduleService) GetAssignments(ctx context.Context, tenantID, shiftID uuid.UUID) ([]*model.ShiftAssignment, error) {
-	logger := ctxutil.GetLogger(ctx)
-	assignments, err := s.assignRepo.ListByShift(ctx, tenantID, shiftID)
-	if err != nil {
-		logger.WithError(err).Error("failed to get assignments")
-		return nil, apierror.Internal("failed to get assignments").WithKey("errors.unknown")
-	}
-	return assignments, nil
+	return s.newAssignmentService().ListByShift(ctx, tenantID, shiftID)
 }
 
 // DeleteAssignment cancels and removes a shift assignment.
 func (s *ScheduleService) DeleteAssignment(ctx context.Context, tenantID, assignmentID uuid.UUID) error {
-	logger := ctxutil.GetLogger(ctx)
-
-	assignment, err := s.assignRepo.GetByID(ctx, tenantID, assignmentID)
-	if err != nil {
-		logger.WithError(err).Error("failed to get assignment")
-		return apierror.Internal("failed to get assignment").WithKey("errors.unknown")
-	}
-	if assignment == nil {
-		return apierror.NotFound("assignment", assignmentID.String()).WithKey("errors.unknown")
-	}
-
-	if err := s.assignRepo.Delete(ctx, tenantID, assignmentID); err != nil {
-		logger.WithError(err).Error("failed to delete assignment")
-		return apierror.Internal("failed to delete assignment").WithKey("errors.unknown")
-	}
-
-	s.emitter.Publish(event.Event{
-		Type:     event.TypeAssignmentUpdated,
-		TenantID: tenantID,
-		UserID:   ctxutil.GetUserID(ctx),
-		Payload:  map[string]interface{}{"id": assignmentID, "action": "deleted"},
-	})
-
-	return nil
+	return s.newAssignmentService().Delete(ctx, tenantID, assignmentID)
 }
 
-// ResetWeekAssignments deletes all assignments for the week that starts on weekStart.
-// weekStart must be a Monday; the function deletes assignments from weekStart to weekStart+6 days inclusive.
-// Returns the number of deleted rows.
+// ResetWeekAssignments deletes all assignments for the week starting on weekStart.
 func (s *ScheduleService) ResetWeekAssignments(ctx context.Context, tenantID uuid.UUID, weekStart time.Time) (int64, error) {
-	logger := ctxutil.GetLogger(ctx)
-
-	// Normalise to midnight UTC and derive end of week (Sunday).
-	from := weekStart.UTC().Truncate(24 * time.Hour)
-	to := from.AddDate(0, 0, 6)
-
-	deleted, err := s.assignRepo.DeleteByDateRange(ctx, tenantID, from, to)
-	if err != nil {
-		logger.WithError(err).Error("failed to reset week assignments")
-		return 0, apierror.Internal("failed to reset week assignments").WithKey("errors.unknown")
-	}
-
-	s.emitter.Publish(event.Event{
-		Type:     event.TypeAssignmentUpdated,
-		TenantID: tenantID,
-		UserID:   ctxutil.GetUserID(ctx),
-		Payload:  map[string]interface{}{"action": "reset_week", "week_start": from.Format("2006-01-02"), "deleted": deleted},
-	})
-
-	return deleted, nil
+	return s.newAssignmentService().ResetWeek(ctx, tenantID, weekStart)
 }
 
 // GenerateICS generates an iCalendar string for employee shifts.
