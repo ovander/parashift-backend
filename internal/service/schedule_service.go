@@ -677,7 +677,7 @@ func (s *ScheduleService) UpdateShift(ctx context.Context, tenantID, id uuid.UUI
 	shift.UpdatedAt = time.Now()
 	if err := s.shiftRepo.Update(ctx, shift); err != nil {
 		logger.WithError(err).Error("failed to update shift")
-		return nil, apierror.Internal("failed to update shift").WithKey("errors.unknown")
+		return nil, optimisticErr(err, apierror.Internal("failed to update shift").WithKey("errors.unknown"))
 	}
 
 	// Publish event

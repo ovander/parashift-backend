@@ -9,6 +9,7 @@ import (
 // Employee represents a pharmacy employee with contract and schedule information.
 type Employee struct {
 	TenantScoped
+	Versioned
 	Name        string         `gorm:"not null"`
 	Position    string         `gorm:"not null;default:'employee'"` // manager|employee — controls RBAC access
 	JobRole     string         `gorm:"not null;default:''"` // pharmacist|animator|logistics_agent|... — controls shift eligibility

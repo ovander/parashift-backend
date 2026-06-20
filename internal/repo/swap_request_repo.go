@@ -89,7 +89,7 @@ func (r *swapRequestRepository) Create(ctx context.Context, sr *model.SwapReques
 	return r.db.WithContext(ctx).Create(sr).Error
 }
 
-// Update updates an existing swap request.
+// Update updates an existing swap request with optimistic-lock guarding (ARC-3).
 func (r *swapRequestRepository) Update(ctx context.Context, sr *model.SwapRequest) error {
-	return r.db.WithContext(ctx).Save(sr).Error
+	return updateOptimistic(r.db, ctx, sr)
 }

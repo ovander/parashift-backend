@@ -15,3 +15,20 @@ type TenantScoped struct {
 	UpdatedAt time.Time      `gorm:"not null"`
 	DeletedAt gorm.DeletedAt `gorm:"index"`
 }
+
+// GetID exposes the primary key (used by the optimistic-update helper).
+func (t *TenantScoped) GetID() uuid.UUID { return t.ID }
+
+// Versioned is an opt-in mixin adding optimistic concurrency control (ARC-3).
+// Only models whose table carries a `version` column embed it; each versioned
+// update bumps the version and guards on the prior value, so a concurrent writer
+// working from a stale copy is rejected instead of silently clobbering the row.
+type Versioned struct {
+	Version int `gorm:"not null;default:0"`
+}
+
+// GetVersion returns the current optimistic-lock version.
+func (v *Versioned) GetVersion() int { return v.Version }
+
+// SetVersion sets the optimistic-lock version.
+func (v *Versioned) SetVersion(n int) { v.Version = n }

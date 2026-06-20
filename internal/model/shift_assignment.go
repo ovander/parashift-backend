@@ -21,6 +21,7 @@ const (
 // time so the rule engine can calculate real hours without an extra JOIN.
 type ShiftAssignment struct {
 	TenantScoped
+	Versioned
 	ShiftInstanceID uuid.UUID `gorm:"type:uuid;not null;index"`
 	EmployeeID      uuid.UUID `gorm:"type:uuid;not null;index"`
 	Status          string    `gorm:"not null;default:'confirmed'"` // confirmed|cancelled|pending

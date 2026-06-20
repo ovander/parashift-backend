@@ -95,9 +95,9 @@ func (r *shiftAssignmentRepository) CreateBatch(ctx context.Context, assignments
 	return r.db.WithContext(ctx).Create(assignments).Error
 }
 
-// Update updates an existing assignment.
+// Update updates an existing assignment with optimistic-lock guarding (ARC-3).
 func (r *shiftAssignmentRepository) Update(ctx context.Context, a *model.ShiftAssignment) error {
-	return r.db.WithContext(ctx).Save(a).Error
+	return updateOptimistic(r.db, ctx, a)
 }
 
 // Delete deletes an assignment by tenant and ID.

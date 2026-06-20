@@ -209,9 +209,9 @@ func (r *employeeRepository) Create(ctx context.Context, e *model.Employee) erro
 	return r.db.WithContext(ctx).Create(e).Error
 }
 
-// Update updates an existing employee.
+// Update updates an existing employee with optimistic-lock guarding (ARC-3).
 func (r *employeeRepository) Update(ctx context.Context, e *model.Employee) error {
-	return r.db.WithContext(ctx).Save(e).Error
+	return updateOptimistic(r.db, ctx, e)
 }
 
 // Delete deletes an employee by tenant and ID.
