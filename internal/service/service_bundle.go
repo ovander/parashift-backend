@@ -64,7 +64,7 @@ func NewServiceBundle(repos *repo.RepoBundle, logger *logrus.Entry, cfgs ...*con
 		repos.Employee, repos.LeaveRequest, repos.Availability,
 		repos.Store,
 		emitter, logger.WithField("service", "schedule"),
-	).WithRuleEngine(ruleEngine)
+	).WithRuleEngine(ruleEngine).WithTxRunner(repos.WithTx)
 
 	swap := NewSwapService(
 		repos.SwapRequest, repos.ShiftInstance, repos.ShiftAssignment, repos.Employee,

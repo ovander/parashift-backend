@@ -122,6 +122,9 @@ type ShiftInstanceRepository interface {
 	DeleteBySlotIDs(ctx context.Context, tenantID uuid.UUID, slotIDs []uuid.UUID, from, to time.Time) error
 	// ListByIDs retrieves multiple shifts by their IDs in a single query.
 	ListByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) ([]*model.ShiftInstance, error)
+	// DeleteByIDs hard-deletes the given shifts (scoped to tenant). Used as a
+	// scoped compensating delete so only just-created shifts are removed.
+	DeleteByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) error
 	// SetStatusByDateRange bulk-updates the status of all shifts in a date range.
 	// Returns the number of rows affected.
 	SetStatusByDateRange(ctx context.Context, tenantID uuid.UUID, from, to time.Time, status string) (int64, error)
