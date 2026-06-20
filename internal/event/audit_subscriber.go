@@ -18,9 +18,41 @@ func NewAuditSubscriber(db *gorm.DB) *AuditSubscriber {
 	return &AuditSubscriber{db: db}
 }
 
+// employeeAuditView is an allow-listed projection of an Employee for the audit
+// trail. It deliberately omits secret fields (AuthID, ClaimToken) so invite
+// tokens and auth subjects are never persisted in audit_logs.After (SEC-2).
+type employeeAuditView struct {
+	ID       uuid.UUID `json:"id"`
+	TenantID uuid.UUID `json:"tenant_id"`
+	Name     string    `json:"name"`
+	Position string    `json:"position"`
+	JobRole  string    `json:"job_role"`
+	Email    string    `json:"email"`
+	Locale   string    `json:"locale"`
+}
+
+// sanitizeForAudit returns a safe-to-persist representation of an event payload.
+// Sensitive aggregates (currently *model.Employee) are projected onto an
+// allow-listed view; all other payloads pass through unchanged. Combined with
+// the json:"-" tags on Employee secrets, this is defense-in-depth.
+func sanitizeForAudit(payload any) any {
+	if e, ok := payload.(*model.Employee); ok && e != nil {
+		return employeeAuditView{
+			ID:       e.ID,
+			TenantID: e.TenantID,
+			Name:     e.Name,
+			Position: e.Position,
+			JobRole:  e.JobRole,
+			Email:    e.Email,
+			Locale:   e.Locale,
+		}
+	}
+	return payload
+}
+
 // Handle processes an event and records it in the audit log.
 func (as *AuditSubscriber) Handle(evt Event) {
-	afterBytes, err := json.Marshal(evt.Payload)
+	afterBytes, err := json.Marshal(sanitizeForAudit(evt.Payload))
 	if err != nil {
 		// Log error but don't block event processing
 		return

@@ -15,8 +15,8 @@ type Employee struct {
 	ContractID  *uuid.UUID     `gorm:"type:uuid"`
 	StartDate   time.Time      `gorm:"not null"` // A/B week anchor date
 	Email       string         `gorm:"default:''"` // used to send Socrate invite
-	AuthID      string         `gorm:"default:'';index"` // Socrate sub claim; empty until the invite is claimed
-	ClaimToken  *string        `gorm:"uniqueIndex"`      // one-time fallback invite token; nil once claimed
+	AuthID      string         `gorm:"default:'';index" json:"-"` // Socrate sub claim; secret — never serialize (SEC-2)
+	ClaimToken  *string        `gorm:"uniqueIndex" json:"-"`       // one-time invite token; secret — never serialize (SEC-2)
 	Locale      string         `gorm:"not null;default:'fr'"` // UI locale — 'fr' | 'en'
 	Preferences datatypes.JSON `gorm:"type:jsonb"` // flexible per-employee preferences (shift preferences, notifications, etc.)
 
