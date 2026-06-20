@@ -3,6 +3,7 @@ module github.com/ovander/parashift
 go 1.25.0
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/getsentry/sentry-go v0.40.0
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/golang-migrate/migrate/v4 v4.17.1
