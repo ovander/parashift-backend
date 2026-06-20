@@ -1,6 +1,8 @@
 package repo
 
 import (
+	"context"
+
 	"gorm.io/gorm"
 )
 
@@ -27,6 +29,23 @@ type RepoBundle struct {
 	PlanningModelMetric     PlanningModelMetricRepository
 	PublicHoliday           PublicHolidayRepository
 	StoreException          StoreExceptionRepository
+}
+
+// WithTx runs fn inside a single database transaction (DAT-1). fn receives a
+// RepoBundle whose repositories all operate on the transaction, so multi-repo
+// operations commit or roll back atomically. Returning a non-nil error — or
+// panicking — rolls the transaction back; returning nil commits it.
+//
+// Example:
+//
+//	err := repos.WithTx(ctx, func(tx *repo.RepoBundle) error {
+//	    if err := tx.ShiftInstance.CreateBatch(ctx, shifts); err != nil { return err }
+//	    return tx.ShiftAssignment.CreateBatch(ctx, assignments)
+//	})
+func (b *RepoBundle) WithTx(ctx context.Context, fn func(tx *RepoBundle) error) error {
+	return b.DB.WithContext(ctx).Transaction(func(txDB *gorm.DB) error {
+		return fn(NewRepoBundle(txDB))
+	})
 }
 
 // NewRepoBundle creates a new repository bundle with all concrete implementations.
