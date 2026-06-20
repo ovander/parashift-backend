@@ -13,4 +13,9 @@ const (
 	PermManageLeave     httpware.Permission = "leave:manage" // read all + approve/reject
 	PermViewCoverage    httpware.Permission = "coverage:view"
 	PermManageSwap      httpware.Permission = "swap:manage"
+
+	// PermPlatformAdmin gates the cross-tenant /admin surface. It is granted
+	// ONLY to the platform "admin" role (never to a store "manager"), so that
+	// tenant-scoped managers cannot reach cross-tenant admin endpoints.
+	PermPlatformAdmin httpware.Permission = "platform:admin"
 )

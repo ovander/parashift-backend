@@ -229,9 +229,12 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 				})
 			})
 
-			// Admin routes (10s timeout for potentially longer operations)
+			// Admin routes (10s timeout for potentially longer operations).
+			// Gated by PermPlatformAdmin — granted ONLY to the platform "admin" role —
+			// so tenant-scoped managers (who hold PermManageStore) cannot reach the
+			// cross-tenant admin surface (employee/store/audit CRUD across tenants).
 			r.With(httpware.Timeout(10 * time.Second)).Route("/admin", func(r chi.Router) {
-				r.Use(mw.RBAC.Require(middleware.PermManageStore))
+				r.Use(mw.RBAC.Require(middleware.PermPlatformAdmin))
 
 				// Dashboard
 				r.Get("/dashboard", handlers.AdminDashboard.GetDashboard)

@@ -22,10 +22,13 @@ func NewRBACMiddleware(logger *logrus.Entry) *RBACMiddleware {
 			PermManageSchedule, PermManageEmployees,
 			PermViewLeave, PermManageLeave, PermManageSwap, PermManageStore,
 		},
+		// Only the platform "admin" role carries PermPlatformAdmin, which gates the
+		// cross-tenant /admin route group. Managers intentionally do NOT have it.
 		"admin": []httpware.Permission{
 			PermViewSchedule, PermViewCoverage, PermViewEmployees,
 			PermManageSchedule, PermManageEmployees,
 			PermViewLeave, PermManageLeave, PermManageSwap, PermManageStore,
+			PermPlatformAdmin,
 		},
 	}
 	return &RBACMiddleware{rbac: httpware.NewRBAC(roleMap, logger)}
