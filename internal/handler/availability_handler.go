@@ -48,6 +48,10 @@ func (h *AvailabilityHandler) SetAvailability(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	if !enforceSelfOrManager(w, r, employeeID) {
+		return
+	}
+
 	var req dto.SetAvailabilityRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
 		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
@@ -82,6 +86,10 @@ func (h *AvailabilityHandler) GetAvailability(w http.ResponseWriter, r *http.Req
 	employeeID, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
 		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
+		return
+	}
+
+	if !enforceSelfOrManager(w, r, employeeID) {
 		return
 	}
 
@@ -126,6 +134,10 @@ func (h *AvailabilityHandler) ListAvailability(w http.ResponseWriter, r *http.Re
 	employeeID, err := uuid.Parse(chi.URLParam(r, "employeeId"))
 	if err != nil {
 		pkg.WriteError(w, apierror.BadRequest("invalid employee ID").WithKey("errors.invalidEmployeeId"))
+		return
+	}
+
+	if !enforceSelfOrManager(w, r, employeeID) {
 		return
 	}
 

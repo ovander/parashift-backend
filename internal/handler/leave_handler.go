@@ -51,15 +51,22 @@ func (h *LeaveHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Determine employee ID: explicit in body (manager acting on behalf) or current user's UUID
-	empID := req.EmployeeID
-	if empID == nil {
-		userID := ctxutil.GetUserID(ctx) // uuid.UUID from JWT user_id claim
-		empID = &userID
+	// Determine employee ID. By default a user files leave for themselves; an
+	// explicit employee_id in the body (manager acting on behalf) is only
+	// honored for managers/admins — an employee may not forge leave for a
+	// colleague (SEC-5).
+	callerID := ctxutil.GetUserID(ctx)
+	empID := callerID
+	if req.EmployeeID != nil {
+		if !isManagerRole(ctxutil.GetUserRole(ctx)) && *req.EmployeeID != callerID {
+			pkg.WriteError(w, apierror.Forbidden("cannot create leave for another employee").WithKey("errors.accessDenied"))
+			return
+		}
+		empID = *req.EmployeeID
 	}
 
 	// Service: CreateLeaveRequest(ctx, tenantID, employeeID, req dto.CreateLeaveRequest)
-	leaveRequest, err := h.svc.CreateLeaveRequest(ctx, storeID, *empID, req.CreateLeaveRequest)
+	leaveRequest, err := h.svc.CreateLeaveRequest(ctx, storeID, empID, req.CreateLeaveRequest)
 	if err != nil {
 		pkg.WriteError(w, err)
 		return
@@ -143,6 +150,11 @@ func (h *LeaveHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Object-level authz: an employee may only read their own leave (SEC-5).
+	if !enforceSelfOrManager(w, r, leaveRequest.EmployeeID) {
+		return
+	}
+
 	pkg.WriteJSON(w, http.StatusOK, toLeaveRequestResponse(leaveRequest))
 }
 
@@ -165,6 +177,17 @@ func (h *LeaveHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	leaveID, err := uuid.Parse(chi.URLParam(r, "leaveId"))
 	if err != nil {
 		pkg.WriteError(w, apierror.BadRequest("invalid leave request ID").WithKey("errors.invalidInput"))
+		return
+	}
+
+	// Object-level authz: load first so an employee can only cancel their own
+	// leave; managers/admins may cancel any in the tenant (SEC-5).
+	existing, err := h.svc.GetLeaveRequest(ctx, storeID, leaveID)
+	if err != nil {
+		pkg.WriteError(w, err)
+		return
+	}
+	if !enforceSelfOrManager(w, r, existing.EmployeeID) {
 		return
 	}
 

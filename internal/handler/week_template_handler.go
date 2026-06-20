@@ -45,6 +45,10 @@ func (h *WeekTemplateHandler) GetTemplates(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if !enforceSelfOrManager(w, r, employeeID) {
+		return
+	}
+
 	// Service: GetWeekTemplates(ctx, tenantID, employeeID) → (dto.WeekTemplateResponse, error)
 	response, err := h.svc.GetWeekTemplates(ctx, storeID, employeeID)
 	if err != nil {

@@ -227,6 +227,10 @@ func (h *QualificationHandler) ListForEmployee(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	if !enforceSelfOrManager(w, r, employeeID) {
+		return
+	}
+
 	quals, err := h.svc.ListEmployeeQualifications(ctx, tenantID, employeeID)
 	if err != nil {
 		pkg.WriteError(w, err)
