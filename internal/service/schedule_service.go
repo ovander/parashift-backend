@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -899,80 +898,9 @@ func (s *ScheduleService) ResetWeekAssignments(ctx context.Context, tenantID uui
 
 // GenerateICS generates an iCalendar string for employee shifts.
 func (s *ScheduleService) GenerateICS(ctx context.Context, tenantID, employeeID uuid.UUID, from, to time.Time) (string, error) {
-	logger := ctxutil.GetLogger(ctx)
-
-	// Get employee to find store/name
-	emp, err := s.empRepo.GetByID(ctx, tenantID, employeeID)
-	if err != nil {
-		logger.WithError(err).Error("failed to get employee")
-		return "", apierror.Internal("failed to get employee").WithKey("errors.unknown")
-	}
-	if emp == nil {
-		return "", apierror.NotFound("employee", employeeID.String()).WithKey("errors.unknown")
-	}
-
-	// Get assignments for the employee in the date range
-	assignments, err := s.assignRepo.ListByEmployee(ctx, tenantID, employeeID, from, to)
-	if err != nil {
-		logger.WithError(err).Error("failed to get assignments")
-		return "", apierror.Internal("failed to get assignments").WithKey("errors.unknown")
-	}
-
-	// Batch-load all required shifts in one query.
-	var shiftByID map[uuid.UUID]*model.ShiftInstance
-	if len(assignments) > 0 {
-		ids := make([]uuid.UUID, 0, len(assignments))
-		seen := make(map[uuid.UUID]bool, len(assignments))
-		for _, a := range assignments {
-			if !seen[a.ShiftInstanceID] {
-				ids = append(ids, a.ShiftInstanceID)
-				seen[a.ShiftInstanceID] = true
-			}
-		}
-		batchShifts, err := s.shiftRepo.ListByIDs(ctx, tenantID, ids)
-		if err != nil {
-			logger.WithError(err).Error("failed to batch-load shifts for ICS")
-			return "", apierror.Internal("failed to load shifts").WithKey("errors.unknown")
-		}
-		shiftByID = make(map[uuid.UUID]*model.ShiftInstance, len(batchShifts))
-		for _, sh := range batchShifts {
-			shiftByID[sh.ID] = sh
-		}
-	}
-
-	// Build ICS string
-	var icsBuilder strings.Builder
-	icsBuilder.WriteString("BEGIN:VCALENDAR\r\n")
-	icsBuilder.WriteString("VERSION:2.0\r\n")
-	icsBuilder.WriteString("PRODID:-//ParaShift//WFM//EN\r\n")
-	icsBuilder.WriteString("CALSCALE:GREGORIAN\r\n")
-	icsBuilder.WriteString("METHOD:PUBLISH\r\n")
-
-	for _, assignment := range assignments {
-		shift, ok := shiftByID[assignment.ShiftInstanceID]
-		if !ok {
-			continue
-		}
-
-		// Format dates/times for iCalendar: YYYYMMDDTHHMMSS
-		dateStr := shift.Date.Format("20060102")
-		startTimeStr := strings.ReplaceAll(shift.StartTime, ":", "")
-		endTimeStr := strings.ReplaceAll(shift.EndTime, ":", "")
-
-		dtStart := fmt.Sprintf("%sT%s00", dateStr, startTimeStr)
-		dtEnd := fmt.Sprintf("%sT%s00", dateStr, endTimeStr)
-
-		icsBuilder.WriteString("BEGIN:VEVENT\r\n")
-		icsBuilder.WriteString(fmt.Sprintf("UID:%s@parashift\r\n", assignment.ID))
-		icsBuilder.WriteString(fmt.Sprintf("DTSTART:%s\r\n", dtStart))
-		icsBuilder.WriteString(fmt.Sprintf("DTEND:%s\r\n", dtEnd))
-		icsBuilder.WriteString("SUMMARY:Work Shift\r\n")
-		icsBuilder.WriteString("END:VEVENT\r\n")
-	}
-
-	icsBuilder.WriteString("END:VCALENDAR\r\n")
-
-	return icsBuilder.String(), nil
+	// Delegated to the extracted ICS exporter component (ARC-1).
+	return newICSExporter(s.empRepo, s.assignRepo, s.shiftRepo).
+		Generate(ctx, tenantID, employeeID, from, to)
 }
 
 // ShiftWithAssignment is a combined view of a shift and its assignment for schedule display.
