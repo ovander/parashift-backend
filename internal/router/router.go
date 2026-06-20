@@ -68,7 +68,10 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 
 			// Claim route: auth required but NO TenantMiddleware — the user has no Employee
 			// record yet; they are binding themselves to one via the invite token.
-			r.With(httpware.Timeout(5 * time.Second)).Post("/claim/{token}", handlers.Claim.Claim)
+			// Per-IP limited to blunt invite-token brute-force/enumeration (SEC-6),
+			// since no tenant context exists here for the per-tenant limiter.
+			claimLim := newIPRateLimiter(5, 10).middleware
+			r.With(claimLim, httpware.Timeout(5*time.Second)).Post("/claim/{token}", handlers.Claim.Claim)
 
 			r.Use(mw.Tenant.Handler)
 

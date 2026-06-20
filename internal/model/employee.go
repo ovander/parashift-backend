@@ -17,6 +17,7 @@ type Employee struct {
 	Email       string         `gorm:"default:''"` // used to send Socrate invite
 	AuthID      string         `gorm:"default:'';index" json:"-"` // Socrate sub claim; secret — never serialize (SEC-2)
 	ClaimToken  *string        `gorm:"uniqueIndex" json:"-"`       // one-time invite token; secret — never serialize (SEC-2)
+	ClaimTokenIssuedAt *time.Time `gorm:"" json:"-"`               // when the current claim_token was issued; drives TTL (SEC-6)
 	Locale      string         `gorm:"not null;default:'fr'"` // UI locale — 'fr' | 'en'
 	Preferences datatypes.JSON `gorm:"type:jsonb"` // flexible per-employee preferences (shift preferences, notifications, etc.)
 

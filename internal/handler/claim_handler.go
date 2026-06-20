@@ -40,7 +40,10 @@ func (h *ClaimHandler) Claim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	emp, err := h.svc.ClaimByToken(ctx, token, sub)
+	// callerEmail comes from the verified token's email claim when present; the
+	// service enforces it against the invited employee's email (SEC-6).
+	callerEmail := ctxutil.GetUserEmail(ctx)
+	emp, err := h.svc.ClaimByToken(ctx, token, sub, callerEmail)
 	if err != nil {
 		pkg.WriteError(w, err)
 		return

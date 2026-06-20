@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,21 @@ import (
 	"github.com/ovander/parashift/internal/repo"
 	"github.com/sirupsen/logrus"
 )
+
+// inviteTokenTTL bounds how long a one-time claim (invite) token remains valid
+// after issuance, so a leaked or stale link cannot be used indefinitely (SEC-6).
+const inviteTokenTTL = 72 * time.Hour
+
+// assignClaimToken generates a fresh one-time invite token and stamps its
+// issuance time (used for TTL enforcement). Returns the token for callers that
+// surface it (e.g. resend-invite).
+func assignClaimToken(emp *model.Employee) string {
+	token := uuid.New().String()
+	now := time.Now()
+	emp.ClaimToken = &token
+	emp.ClaimTokenIssuedAt = &now
+	return token
+}
 
 // EmployeeService manages employees within a store (tenant).
 type EmployeeService struct {
@@ -166,15 +182,13 @@ func (s *EmployeeService) Create(ctx context.Context, tenantID uuid.UUID, req dt
 		case errors.Is(err, socrate.ErrUserAlreadyExists):
 			// User already exists in Socrate — they can log in and claim the record.
 			// Leave auth_id empty; the existing user will claim via the link or next login.
-			token := uuid.New().String()
-			emp.ClaimToken = &token
+			assignClaimToken(emp)
 		default:
 			// Socrate call failed (admin port unreachable, bad credentials, etc.).
 			// Degrade gracefully: the email is stored for future retry; a claim token is
 			// generated so the admin can still share a manual invite link in the meantime.
 			logger.WithError(err).Warn("Socrate invite failed, falling back to claim token")
-			token := uuid.New().String()
-			emp.ClaimToken = &token
+			assignClaimToken(emp)
 		}
 
 	case req.AuthID != "":
@@ -182,8 +196,7 @@ func (s *EmployeeService) Create(ctx context.Context, tenantID uuid.UUID, req dt
 
 	default:
 		// Path 3: no email, no auth_id — generate a fallback claim token.
-		token := uuid.New().String()
-		emp.ClaimToken = &token
+		assignClaimToken(emp)
 	}
 
 	if err := s.repo.Create(ctx, emp); err != nil {
@@ -202,9 +215,15 @@ func (s *EmployeeService) Create(ctx context.Context, tenantID uuid.UUID, req dt
 	return emp, nil
 }
 
-// ClaimByToken binds the supplied Socrate sub to the employee identified by the one-time
-// claim token. The token is cleared after successful binding.
-func (s *EmployeeService) ClaimByToken(ctx context.Context, token, sub string) (*model.Employee, error) {
+// ClaimByToken binds the supplied Socrate sub to the employee identified by the
+// one-time claim token, after enforcing two SEC-6 controls:
+//   - TTL: the token must have been issued within inviteTokenTTL.
+//   - Identity binding: when both the caller's email (from the access/ID token)
+//     and the invited employee's email are known, they must match — preventing a
+//     leaked invite link from being claimed by a different account.
+//
+// The token is cleared after successful binding.
+func (s *EmployeeService) ClaimByToken(ctx context.Context, token, sub, callerEmail string) (*model.Employee, error) {
 	logger := ctxutil.GetLogger(ctx)
 
 	if token == "" || sub == "" {
@@ -220,9 +239,27 @@ func (s *EmployeeService) ClaimByToken(ctx context.Context, token, sub string) (
 		return nil, apierror.NotFound("invite", token).WithKey("errors.unknown")
 	}
 
-	// Bind the sub and clear the token.
+	// TTL: reject expired invites. Fall back to created_at for legacy rows that
+	// predate the claim_token_issued_at column.
+	issuedAt := emp.CreatedAt
+	if emp.ClaimTokenIssuedAt != nil {
+		issuedAt = *emp.ClaimTokenIssuedAt
+	}
+	if time.Since(issuedAt) > inviteTokenTTL {
+		logger.WithField("employee_id", emp.ID).Warn("claim rejected: invite token expired")
+		return nil, apierror.BadRequest("invite token has expired").WithKey("errors.invalidInput")
+	}
+
+	// Identity binding: enforce email match when both sides are known.
+	if callerEmail != "" && emp.Email != "" && !strings.EqualFold(strings.TrimSpace(callerEmail), strings.TrimSpace(emp.Email)) {
+		logger.WithField("employee_id", emp.ID).Warn("claim rejected: invite email mismatch")
+		return nil, apierror.Forbidden("invite does not match your account").WithKey("errors.accessDenied")
+	}
+
+	// Bind the sub and clear the token + its issuance timestamp.
 	emp.AuthID = sub
 	emp.ClaimToken = nil
+	emp.ClaimTokenIssuedAt = nil
 	emp.UpdatedAt = time.Now()
 
 	if err := s.repo.Update(ctx, emp); err != nil {
@@ -464,8 +501,7 @@ func (s *EmployeeService) ResendInvite(ctx context.Context, id uuid.UUID) (*Rese
 		case errors.Is(inviteErr, socrate.ErrUserAlreadyExists):
 			// User exists in Socrate but we don't have their ID — fall through to
 			// magic link below by returning a claim token as a safe fallback.
-			token := uuid.New().String()
-			emp.ClaimToken = &token
+			token := assignClaimToken(emp)
 			emp.UpdatedAt = time.Now()
 			_ = s.repo.Update(ctx, emp)
 			logger.WithField("employee_id", id).Info("resend invite: Socrate user exists, generated claim token")
@@ -474,8 +510,7 @@ func (s *EmployeeService) ResendInvite(ctx context.Context, id uuid.UUID) (*Rese
 		default:
 			// Socrate call failed — generate a fresh claim token as a fallback.
 			logger.WithError(inviteErr).Warn("resend invite: Socrate invite failed, falling back to claim token")
-			token := uuid.New().String()
-			emp.ClaimToken = &token
+			token := assignClaimToken(emp)
 			emp.UpdatedAt = time.Now()
 			_ = s.repo.Update(ctx, emp)
 			return &ResendInviteResult{EmailSent: false, ClaimToken: &token}, nil
