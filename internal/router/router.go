@@ -12,6 +12,7 @@ import (
 	"github.com/ovander/parashift/internal/handler"
 	"github.com/ovander/parashift/internal/middleware"
 	"github.com/ovander/parashift/internal/pkg/metrics"
+	"github.com/ovander/parashift/internal/pkg/tracing"
 )
 
 // Middleware holds all HTTP middleware instances.
@@ -33,6 +34,10 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 	r.Use(middleware.CORS(cfg.AllowedOrigins))
 	r.Use(httpware.RequestID)
 	r.Use(httpware.Logger(mw.Logger))
+	// Tracing runs after Logger (so it enriches the request logger with trace_id)
+	// and outside Recover (so panics surface as 5xx spans). It is a no-op span when
+	// tracing is disabled, so it is always safe to install (OBS-3).
+	r.Use(tracing.Middleware)
 	r.Use(httpware.SecurityHeaders)
 	r.Use(httpware.BodyLimit(cfg.MaxRequestBodyBytes))
 	r.Use(httpware.Recover(mw.Logger.WithField("component", "recover")))
