@@ -3,6 +3,7 @@ package devtools
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -45,4 +46,38 @@ func TestCIWorkflowPresent(t *testing.T) {
 func TestGolangciConfigPresent(t *testing.T) {
 	_, err := os.Stat(repoFile(t, ".golangci.yml"))
 	require.NoError(t, err, ".golangci.yml must exist for the CI lint step")
+}
+
+// gitIgnored reports whether git treats path as ignored (check-ignore exits 0
+// when ignored, 1 when not). Skips if git or the work tree is unavailable.
+func gitIgnored(t *testing.T, path string) bool {
+	t.Helper()
+	root := repoFile(t, ".")
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	cmd := exec.Command("git", "-C", root, "check-ignore", "-q", path)
+	err := cmd.Run()
+	if err == nil {
+		return true // exit 0 → ignored
+	}
+	if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 1 {
+		return false // exit 1 → not ignored
+	}
+	t.Skipf("git check-ignore unavailable here: %v", err)
+	return false
+}
+
+// TestGitignoreAnchorsBinaries guards the fix for the over-broad server/app
+// patterns: real source under cmd/server must NOT be ignored, while the
+// repo-root binaries still are.
+func TestGitignoreAnchorsBinaries(t *testing.T) {
+	assert.False(t, gitIgnored(t, "cmd/server/main.go"),
+		"cmd/server source must not be git-ignored")
+	assert.False(t, gitIgnored(t, "cmd/server/anything_test.go"),
+		"new files under cmd/server must not be git-ignored")
+	assert.True(t, gitIgnored(t, "server"),
+		"the repo-root server binary should still be ignored")
+	assert.True(t, gitIgnored(t, "app"),
+		"the repo-root app binary should still be ignored")
 }
