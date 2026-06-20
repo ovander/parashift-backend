@@ -238,6 +238,7 @@ type MockShiftInstanceRepo struct {
 	ListByIDsFn              func(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) ([]*model.ShiftInstance, error)
 	SetStatusByDateRangeFn   func(ctx context.Context, tenantID uuid.UUID, from, to time.Time, status string) (int64, error)
 	DeleteByDateRangeFn      func(ctx context.Context, tenantID uuid.UUID, from, to time.Time) error
+	DeleteByIDsFn            func(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) error
 }
 
 func (m *MockShiftInstanceRepo) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*model.ShiftInstance, error) {
@@ -299,6 +300,13 @@ func (m *MockShiftInstanceRepo) ListByIDs(ctx context.Context, tenantID uuid.UUI
 		return m.ListByIDsFn(ctx, tenantID, ids)
 	}
 	return nil, nil
+}
+
+func (m *MockShiftInstanceRepo) DeleteByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) error {
+	if m.DeleteByIDsFn != nil {
+		return m.DeleteByIDsFn(ctx, tenantID, ids)
+	}
+	return nil
 }
 func (m *MockShiftInstanceRepo) SetStatusByDateRange(ctx context.Context, tenantID uuid.UUID, from, to time.Time, status string) (int64, error) {
 	if m.SetStatusByDateRangeFn != nil {

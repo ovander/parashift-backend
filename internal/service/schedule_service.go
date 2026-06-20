@@ -17,6 +17,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// TxRunner executes fn inside a single DB transaction, passing tx-bound repos.
+// *repo.RepoBundle.WithTx satisfies this; tests can supply a fake.
+type TxRunner func(ctx context.Context, fn func(tx *repo.RepoBundle) error) error
+
 // ScheduleService is the core scheduling domain service.
 type ScheduleService struct {
 	shiftRepo      repo.ShiftInstanceRepository
@@ -29,8 +33,16 @@ type ScheduleService struct {
 	exceptionRepo  repo.StoreExceptionRepository // optional — nil disables exception checks
 	ruleEngine     *RuleEngine                   // optional — nil disables rule evaluation
 	holidaySvc     *PublicHolidayService         // optional — nil disables holiday blocking
+	txRunner       TxRunner                      // optional — nil falls back to sequential writes
 	emitter        *event.Emitter
 	logger         *logrus.Entry
+}
+
+// WithTxRunner attaches a transaction runner so multi-step schedule operations
+// (generate / regenerate / reset) commit or roll back atomically (DAT-2).
+func (s *ScheduleService) WithTxRunner(r TxRunner) *ScheduleService {
+	s.txRunner = r
+	return s
 }
 
 // NewScheduleService creates a new ScheduleService.
@@ -199,8 +211,28 @@ func (s *ScheduleService) UpsertWeekTemplates(ctx context.Context, tenantID, emp
 	return nil
 }
 
-// ProjectABSchedule generates ShiftInstances from WeekTemplates for all employees in the store.
+// ProjectABSchedule generates ShiftInstances from WeekTemplates for all employees
+// in the store. When a transaction runner is configured the template cleanup and
+// the shift+assignment inserts commit or roll back together (DAT-2).
 func (s *ScheduleService) ProjectABSchedule(ctx context.Context, tenantID uuid.UUID, req dto.GenerateScheduleRequest) (int, error) {
+	if s.txRunner != nil {
+		var count int
+		err := s.txRunner(ctx, func(tx *repo.RepoBundle) error {
+			c, e := s.projectABSchedule(ctx, tenantID, req, tx.ShiftInstance, tx.ShiftAssignment)
+			count = c
+			return e
+		})
+		return count, err
+	}
+	return s.projectABSchedule(ctx, tenantID, req, s.shiftRepo, s.assignRepo)
+}
+
+// projectABSchedule performs the projection, routing every mutation (template
+// cleanup + shift/assignment inserts + any compensating delete) through the
+// supplied writer repos so the caller can run the whole thing inside one
+// transaction. Reads use the service's base repos (reference data not mutated
+// here). Exported callers go through ProjectABSchedule.
+func (s *ScheduleService) projectABSchedule(ctx context.Context, tenantID uuid.UUID, req dto.GenerateScheduleRequest, shiftW repo.ShiftInstanceRepository, assignW repo.ShiftAssignmentRepository) (int, error) {
 	logger := ctxutil.GetLogger(ctx)
 
 	// req.DateFrom and req.DateTo are already time.Time from DTO JSON binding
@@ -214,7 +246,7 @@ func (s *ScheduleService) ProjectABSchedule(ctx context.Context, tenantID uuid.U
 	}
 
 	// Delete existing TEMPLATE-sourced shifts for the date range first (idempotent)
-	if err := s.shiftRepo.DeleteBySourceTemplate(ctx, tenantID, dateFrom, dateTo); err != nil {
+	if err := shiftW.DeleteBySourceTemplate(ctx, tenantID, dateFrom, dateTo); err != nil {
 		logger.WithError(err).Error("failed to delete existing template shifts")
 		return 0, apierror.Internal("failed to delete existing shifts").WithKey("errors.unknown")
 	}
@@ -393,18 +425,13 @@ func (s *ScheduleService) ProjectABSchedule(ctx context.Context, tenantID uuid.U
 		return 0, nil
 	}
 
-	// Batch-create all shifts.
+	// Build shifts and their confirmed assignments up front (shift IDs are
+	// pre-assigned), then persist both atomically.
 	shifts := make([]*model.ShiftInstance, len(pending))
 	for i, p := range pending {
 		shifts[i] = p.shift
 	}
-	if err := s.shiftRepo.CreateBatch(ctx, shifts); err != nil {
-		logger.WithError(err).Error("failed to create shifts batch")
-		return 0, apierror.Internal("failed to create shifts").WithKey("errors.unknown")
-	}
 
-	// Batch-create all assignments in a single SQL statement — include denormalized
-	// shift time fields so the rule engine can calculate real hours without a JOIN.
 	assignedBy := ctxutil.GetUserID(ctx)
 	now := time.Now()
 	assignments := make([]*model.ShiftAssignment, len(pending))
@@ -426,12 +453,24 @@ func (s *ScheduleService) ProjectABSchedule(ctx context.Context, tenantID uuid.U
 			ShiftEndTime:    p.shift.EndTime,
 		}
 	}
-	if err := s.assignRepo.CreateBatch(ctx, assignments); err != nil {
-		logger.WithError(err).Errorf("failed to batch-create %d assignments — rolling back shifts", len(assignments))
-		// Compensating delete: hard-remove the shifts we just created so the week
-		// stays at total=0 and auto-projection can retry on the next load.
-		if delErr := s.shiftRepo.DeleteByDateRange(ctx, tenantID, dateFrom, dateTo); delErr != nil {
-			logger.WithError(delErr).Error("compensating shift delete also failed — week may be stuck; use Regenerate")
+
+	// Persist shifts then their confirmed assignments via the writer repos. When
+	// these are tx-bound (the default in production) a mid-sequence failure rolls
+	// both back. As defense-in-depth for the non-tx path, an assignment failure
+	// triggers a SCOPED compensating delete of ONLY the just-created shift IDs —
+	// never other shifts in the range (DAT-2).
+	if err := shiftW.CreateBatch(ctx, shifts); err != nil {
+		logger.WithError(err).Error("failed to create shifts batch")
+		return 0, apierror.Internal("failed to create shifts").WithKey("errors.unknown")
+	}
+	if err := assignW.CreateBatch(ctx, assignments); err != nil {
+		logger.WithError(err).Errorf("failed to batch-create %d assignments — rolling back just-created shifts", len(assignments))
+		ids := make([]uuid.UUID, len(shifts))
+		for i, sh := range shifts {
+			ids[i] = sh.ID
+		}
+		if delErr := shiftW.DeleteByIDs(ctx, tenantID, ids); delErr != nil {
+			logger.WithError(delErr).Error("compensating shift delete failed — week may be inconsistent; use Regenerate")
 		}
 		return 0, apierror.Internal(fmt.Sprintf("failed to create assignments: %s", err.Error())).WithKey("errors.unknown")
 	}
@@ -463,26 +502,36 @@ func (s *ScheduleService) RegenerateWeek(ctx context.Context, tenantID uuid.UUID
 	// Snap to Monday 00:00 → Sunday end-of-day UTC
 	from := weekStart
 	to := weekStart.AddDate(0, 0, 6)
+	req := dto.GenerateScheduleRequest{DateFrom: from, DateTo: to}
 
-	// 1. Delete all assignments for the week first (FK child before parent).
-	if _, err := s.assignRepo.DeleteByDateRange(ctx, tenantID, from, to); err != nil {
-		logger.WithError(err).Error("regenerate: failed to delete assignments")
-		return 0, apierror.Internal("failed to reset week assignments").WithKey("errors.unknown")
+	// Run delete-assignments → delete-shifts → re-project as a SINGLE transaction
+	// when a runner is configured: if projection fails, the deletes roll back and
+	// the prior week is left intact (DAT-2). Falls back to the previous sequential
+	// flow when no runner is set (tests).
+	regen := func(shiftW repo.ShiftInstanceRepository, assignW repo.ShiftAssignmentRepository) (int, error) {
+		if _, err := assignW.DeleteByDateRange(ctx, tenantID, from, to); err != nil {
+			logger.WithError(err).Error("regenerate: failed to delete assignments")
+			return 0, apierror.Internal("failed to reset week assignments").WithKey("errors.unknown")
+		}
+		if err := shiftW.DeleteByDateRange(ctx, tenantID, from, to); err != nil {
+			logger.WithError(err).Error("regenerate: failed to delete shifts")
+			return 0, apierror.Internal("failed to reset week shifts").WithKey("errors.unknown")
+		}
+		return s.projectABSchedule(ctx, tenantID, req, shiftW, assignW)
 	}
 
-	// 2. Delete all shifts for the week (any source).
-	if err := s.shiftRepo.DeleteByDateRange(ctx, tenantID, from, to); err != nil {
-		logger.WithError(err).Error("regenerate: failed to delete shifts")
-		return 0, apierror.Internal("failed to reset week shifts").WithKey("errors.unknown")
+	var count int
+	var err error
+	if s.txRunner != nil {
+		err = s.txRunner(ctx, func(tx *repo.RepoBundle) error {
+			count, err = regen(tx.ShiftInstance, tx.ShiftAssignment)
+			return err
+		})
+	} else {
+		count, err = regen(s.shiftRepo, s.assignRepo)
 	}
-
-	// 3. Re-project from templates.
-	count, err := s.ProjectABSchedule(ctx, tenantID, dto.GenerateScheduleRequest{
-		DateFrom: from,
-		DateTo:   to,
-	})
 	if err != nil {
-		logger.WithError(err).Error("regenerate: projection failed")
+		logger.WithError(err).Error("regenerate: failed (rolled back if transactional)")
 		return 0, err
 	}
 

@@ -103,6 +103,17 @@ func (r *shiftInstanceRepository) Delete(ctx context.Context, tenantID, id uuid.
 		Delete(&model.ShiftInstance{}).Error
 }
 
+// DeleteByIDs hard-deletes the given shifts (scoped to tenant). No-op for empty ids.
+// Used as a scoped compensating delete so only just-created shifts are removed.
+func (r *shiftInstanceRepository) DeleteByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Unscoped().
+		Where("tenant_id = ? AND id IN ?", tenantID, ids).
+		Delete(&model.ShiftInstance{}).Error
+}
+
 // DeleteBySourceTemplate hard-deletes all template-sourced shifts within a date range.
 // Unscoped() bypasses GORM's soft-delete so rows are physically removed and the
 // shift_instance_id FK on shift_assignments cannot be left dangling.
