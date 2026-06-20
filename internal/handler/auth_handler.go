@@ -11,6 +11,7 @@ import (
 
 	"github.com/ovander/parashift/internal/config"
 	"github.com/ovander/parashift/internal/pkg"
+	"github.com/sirupsen/logrus"
 )
 
 // AuthHandler handles OAuth2 token exchange with Socrate.
@@ -86,7 +87,9 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	tokens, err := h.exchangeCode(req.Code, req.CodeVerifier, redirectURI)
 	if err != nil {
-		pkg.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("token exchange failed: %v", err)})
+		// Log upstream detail server-side; return a generic message (SEC-8).
+		logrus.WithError(err).Warn("auth: token exchange failed")
+		pkg.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": "authentication failed"})
 		return
 	}
 
@@ -107,7 +110,9 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	tokens, err := h.refreshToken(req.RefreshToken)
 	if err != nil {
-		pkg.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("token refresh failed: %v", err)})
+		// Log upstream detail server-side; return a generic message (SEC-8).
+		logrus.WithError(err).Warn("auth: token refresh failed")
+		pkg.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": "token refresh failed"})
 		return
 	}
 
