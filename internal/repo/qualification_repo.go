@@ -2,7 +2,6 @@ package repo
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,14 +9,15 @@ import (
 	"gorm.io/gorm"
 )
 
-// qualificationRepository implements QualificationRepository.
+// qualificationRepository embeds the generic tenant repository for
+// Create/GetByID/Delete (ARC-2) and adds list + update.
 type qualificationRepository struct {
-	db *gorm.DB
+	TenantRepository[model.Qualification]
 }
 
 // NewQualificationRepository creates a new qualification repository.
 func NewQualificationRepository(db *gorm.DB) QualificationRepository {
-	return &qualificationRepository{db: db}
+	return &qualificationRepository{NewTenantRepository[model.Qualification](db)}
 }
 
 // List retrieves all qualifications for a tenant.
@@ -31,35 +31,9 @@ func (r *qualificationRepository) List(ctx context.Context, tenantID uuid.UUID) 
 	return quals, nil
 }
 
-// GetByID retrieves a qualification by ID.
-func (r *qualificationRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*model.Qualification, error) {
-	var qual model.Qualification
-	if err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND id = ?", tenantID, id).
-		First(&qual).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &qual, nil
-}
-
-// Create persists a new qualification.
-func (r *qualificationRepository) Create(ctx context.Context, q *model.Qualification) error {
-	return r.db.WithContext(ctx).Create(q).Error
-}
-
 // Update persists changes to a qualification.
 func (r *qualificationRepository) Update(ctx context.Context, q *model.Qualification) error {
 	return r.db.WithContext(ctx).Save(q).Error
-}
-
-// Delete removes a qualification.
-func (r *qualificationRepository) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
-	return r.db.WithContext(ctx).
-		Where("tenant_id = ? AND id = ?", tenantID, id).
-		Delete(&model.Qualification{}).Error
 }
 
 // ─── EmployeeQualificationRepository ──────────────────────────────────────

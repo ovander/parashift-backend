@@ -2,19 +2,21 @@ package repo
 
 import (
 	"context"
+
 	"github.com/google/uuid"
 	"github.com/ovander/parashift/internal/model"
 	"gorm.io/gorm"
 )
 
-// coverageRequirementRepository implements CoverageRequirementRepository.
+// coverageRequirementRepository embeds the generic tenant repository for
+// Create/GetByID/Delete (ARC-2) and adds list + update.
 type coverageRequirementRepository struct {
-	db *gorm.DB
+	TenantRepository[model.CoverageRequirement]
 }
 
 // NewCoverageRequirementRepository creates a new coverage requirement repository.
 func NewCoverageRequirementRepository(db *gorm.DB) CoverageRequirementRepository {
-	return &coverageRequirementRepository{db: db}
+	return &coverageRequirementRepository{NewTenantRepository[model.CoverageRequirement](db)}
 }
 
 // List retrieves all coverage requirements for a tenant.
@@ -28,19 +30,7 @@ func (r *coverageRequirementRepository) List(ctx context.Context, tenantID uuid.
 	return requirements, nil
 }
 
-// Create creates a new coverage requirement.
-func (r *coverageRequirementRepository) Create(ctx context.Context, cr *model.CoverageRequirement) error {
-	return r.db.WithContext(ctx).Create(cr).Error
-}
-
 // Update updates an existing coverage requirement.
 func (r *coverageRequirementRepository) Update(ctx context.Context, cr *model.CoverageRequirement) error {
 	return r.db.WithContext(ctx).Save(cr).Error
-}
-
-// Delete deletes a coverage requirement by tenant and ID.
-func (r *coverageRequirementRepository) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
-	return r.db.WithContext(ctx).
-		Where("tenant_id = ? AND id = ?", tenantID, id).
-		Delete(&model.CoverageRequirement{}).Error
 }

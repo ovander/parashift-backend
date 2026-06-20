@@ -2,20 +2,21 @@ package repo
 
 import (
 	"context"
-	"errors"
 
 	"github.com/google/uuid"
 	"github.com/ovander/parashift/internal/model"
 	"gorm.io/gorm"
 )
 
+// shiftSlotRepository embeds the generic tenant repository for
+// Create/GetByID/Delete (ARC-2) and adds list queries.
 type shiftSlotRepository struct {
-	db *gorm.DB
+	TenantRepository[model.ShiftSlot]
 }
 
 // NewShiftSlotRepository creates a new ShiftSlotRepository.
 func NewShiftSlotRepository(db *gorm.DB) ShiftSlotRepository {
-	return &shiftSlotRepository{db: db}
+	return &shiftSlotRepository{NewTenantRepository[model.ShiftSlot](db)}
 }
 
 func (r *shiftSlotRepository) List(ctx context.Context, tenantID uuid.UUID) ([]*model.ShiftSlot, error) {
@@ -29,19 +30,6 @@ func (r *shiftSlotRepository) List(ctx context.Context, tenantID uuid.UUID) ([]*
 	return slots, nil
 }
 
-func (r *shiftSlotRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*model.ShiftSlot, error) {
-	var slot model.ShiftSlot
-	if err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND id = ?", tenantID, id).
-		First(&slot).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &slot, nil
-}
-
 func (r *shiftSlotRepository) ListByScheme(ctx context.Context, tenantID uuid.UUID, scheme string) ([]*model.ShiftSlot, error) {
 	var slots []*model.ShiftSlot
 	if err := r.db.WithContext(ctx).
@@ -51,14 +39,4 @@ func (r *shiftSlotRepository) ListByScheme(ctx context.Context, tenantID uuid.UU
 		return nil, err
 	}
 	return slots, nil
-}
-
-func (r *shiftSlotRepository) Create(ctx context.Context, slot *model.ShiftSlot) error {
-	return r.db.WithContext(ctx).Create(slot).Error
-}
-
-func (r *shiftSlotRepository) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
-	return r.db.WithContext(ctx).
-		Where("tenant_id = ? AND id = ?", tenantID, id).
-		Delete(&model.ShiftSlot{}).Error
 }
