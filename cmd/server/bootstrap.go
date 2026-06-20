@@ -73,8 +73,13 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 	pingSocrate(cfg, entry)
 	pingSocrateAdmin(cfg, entry)
 
-	// Step 4a: JWT auth (JWKS) — no error return
-	jwtMW := jwtauth.New(cfg.JWKS.URL, cfg.JWKS.Issuer, entry)
+	// Step 4a: JWT auth (JWKS) — no error return.
+	// WithAudience rejects tokens not minted for this app's client_id, so a token
+	// issued for another service on the same Socrate issuer cannot be replayed here
+	// (backendkit v1.8.0). Socrate issues an aud claim for this app; without it the
+	// guard would reject every token.
+	jwtMW := jwtauth.New(cfg.JWKS.URL, cfg.JWKS.Issuer, entry,
+		jwtauth.WithAudience(cfg.Socrate.ClientID))
 
 	// Step 4b: Database connection
 	entry.Info("connecting to database")

@@ -91,6 +91,13 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 			// Standard CRUD operations (5s timeout)
 			r.With(httpware.Timeout(5 * time.Second)).Group(func(r chi.Router) {
 
+				// Fail closed: every handler in this group is tenant-scoped, so reject
+				// any request that reached here without a tenant in context rather than
+				// letting it run against the nil tenant (backendkit v1.8.0). Admins are
+				// not affected — their cross-tenant surface lives under /admin, which is
+				// intentionally outside this group.
+				r.Use(httpware.RequireTenant)
+
 				// Global option lists — single source of truth for all selectable values.
 				// No RBAC required: any authenticated user may read options.
 				r.Get("/options", handlers.Options.GetOptions)
@@ -268,6 +275,7 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 
 			// Manager routes — store-scoped via JWT context (TenantMiddleware already applied)
 			r.With(httpware.Timeout(5 * time.Second)).Route("/manager", func(r chi.Router) {
+				r.Use(httpware.RequireTenant) // tenant-scoped: never run without a tenant
 				r.Use(mw.RBAC.Require(middleware.PermManageEmployees))
 				r.Get("/employees", handlers.ManagerEmployee.List)
 				r.Post("/employees", handlers.ManagerEmployee.Create)

@@ -1,5 +1,10 @@
 module github.com/ovander/parashift
 
+// Language version stays at 1.25 so the linter (golangci-lint v2.5.0, itself built
+// with go1.25) can target the module. The CVE-patched stdlib comes from the build
+// toolchain — CI and the deploy build run Go 1.26.4 — not from this directive, so a
+// `toolchain go1.26.4` line is deliberately omitted (it would force golangci-lint to
+// target 1.26 and fail to load). See .github/workflows/ci.yml go-version.
 go 1.25.0
 
 require (
@@ -9,7 +14,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.17.1
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
-	github.com/ovander/backendkit v1.5.1
+	github.com/ovander/backendkit v1.8.0
 	github.com/prometheus/client_golang v1.12.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
@@ -25,7 +30,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
