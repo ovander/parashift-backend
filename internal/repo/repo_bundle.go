@@ -48,6 +48,19 @@ func (b *RepoBundle) WithTx(ctx context.Context, fn func(tx *RepoBundle) error) 
 	})
 }
 
+// AdvisoryXactLock takes a Postgres transaction-level advisory lock identified by
+// key. It must be called inside a transaction (e.g. within WithTx); the lock is
+// released automatically when that transaction commits or rolls back. Concurrent
+// callers with the same key block until the holder's transaction ends, which
+// serializes otherwise-racy multi-step operations (DAT-3 idempotent generate).
+// A no-op when DB is nil (e.g. fake bundles in unit tests).
+func (b *RepoBundle) AdvisoryXactLock(ctx context.Context, key int64) error {
+	if b.DB == nil {
+		return nil
+	}
+	return b.DB.WithContext(ctx).Exec("SELECT pg_advisory_xact_lock(?)", key).Error
+}
+
 // NewRepoBundle creates a new repository bundle with all concrete implementations.
 func NewRepoBundle(db *gorm.DB) *RepoBundle {
 	return &RepoBundle{
