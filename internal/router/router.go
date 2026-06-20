@@ -110,6 +110,8 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 				r.Patch("/me/locale", handlers.Me.UpdateLocale)
 				r.Get("/me/schedule", handlers.Me.GetMySchedule)
 				r.Get("/me/schedule.ics", handlers.Me.ExportICS)
+				// Self-service "log out everywhere": revoke all of the caller's sessions.
+				r.Post("/me/sessions/revoke", handlers.Revocation.RevokeMine)
 
 				// Store endpoints
 				r.Get("/stores/me", handlers.Store.GetMyStore)
@@ -259,6 +261,8 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 				r.Get("/employees/{employeeId}", handlers.AdminEmployee.Get)
 				r.Put("/employees/{employeeId}", handlers.AdminEmployee.Update)
 				r.Delete("/employees/{employeeId}", handlers.AdminEmployee.Delete)
+				// Admin-driven instant session revocation for a target employee.
+				r.Post("/employees/{employeeId}/sessions/revoke", handlers.Revocation.RevokeEmployee)
 
 				// Manager-specific CRUD (role=manager subset)
 				r.Get("/managers", handlers.AdminManager.List)

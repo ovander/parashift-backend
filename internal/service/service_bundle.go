@@ -40,6 +40,7 @@ type ServiceBundle struct {
 	PlanningModelMetric *PlanningModelMetricService
 	PublicHoliday       *PublicHolidayService
 	StoreException      *StoreExceptionService
+	Revocation          *RevocationService
 	DB                  *gorm.DB
 }
 
@@ -145,6 +146,10 @@ func NewServiceBundle(repos *repo.RepoBundle, logger *logrus.Entry, cfgs ...*con
 	// Create store exception service
 	storeExceptionSvc := NewStoreExceptionService(repos.StoreException)
 
+	// Create revocation service (instant session revocation; wired into the auth
+	// middleware via jwtauth.WithRevocationCheck in bootstrap).
+	revocationSvc := NewRevocationService(repos.TokenRevocation, logger.WithField("service", "revocation"))
+
 	// Attach optional services to the schedule service
 	schedule.WithPublicHolidayService(publicHolidaySvc)
 	schedule.WithStoreExceptionRepo(repos.StoreException)
@@ -174,6 +179,7 @@ func NewServiceBundle(repos *repo.RepoBundle, logger *logrus.Entry, cfgs ...*con
 		PlanningModelMetric: metricSvc,
 		PublicHoliday:       publicHolidaySvc,
 		StoreException:      storeExceptionSvc,
+		Revocation:         revocationSvc,
 		DB:                  repos.DB,
 	}
 }

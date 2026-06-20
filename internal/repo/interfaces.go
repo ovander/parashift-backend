@@ -306,6 +306,15 @@ type PublicHolidayRepository interface {
 	UpsertBatch(ctx context.Context, holidays []*model.PublicHoliday) error
 }
 
+// TokenRevocationRepository persists the per-subject token revocation floor used
+// for instant session revocation (SEC).
+type TokenRevocationRepository interface {
+	// GetBySub returns the revocation record for a subject, or nil if none exists.
+	GetBySub(ctx context.Context, sub string) (*model.TokenRevocation, error)
+	// Upsert raises the revocation floor for a subject to revokedAfter.
+	Upsert(ctx context.Context, sub string, revokedAfter time.Time) error
+}
+
 // PlanningModelMetricRepository defines operations for planning model metrics.
 type PlanningModelMetricRepository interface {
 	// ListByScheme retrieves the most recent N weeks of metrics for a model scheme.

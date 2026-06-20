@@ -95,6 +95,7 @@ type testMocks struct {
 	employeeQualification *testutil.MockEmployeeQualificationRepo
 	planningModelMetric   *testutil.MockPlanningModelMetricRepo
 	publicHoliday         *testutil.MockPublicHolidayRepo
+	tokenRevocation       *testutil.MockTokenRevocationRepo
 }
 
 // emptyMocks returns a bundle where every Fn field is nil (no-op defaults).
@@ -119,6 +120,7 @@ func emptyMocks() *testMocks {
 		employeeQualification: &testutil.MockEmployeeQualificationRepo{},
 		planningModelMetric:   &testutil.MockPlanningModelMetricRepo{},
 		publicHoliday:         &testutil.MockPublicHolidayRepo{},
+		tokenRevocation:       &testutil.MockTokenRevocationRepo{},
 	}
 }
 
@@ -163,6 +165,7 @@ func newTestServer(t *testing.T, mocks *testMocks) *httptest.Server {
 	qualSvc := service.NewQualificationService(mocks.qualification, mocks.employeeQualification, logger.WithField("svc", "qualification"))
 	holidaySvc := service.NewPublicHolidayService(mocks.publicHoliday, logger.WithField("svc", "public_holiday"))
 	scheduleSvc.WithPublicHolidayService(holidaySvc)
+	revocationSvc := service.NewRevocationService(mocks.tokenRevocation, logger.WithField("svc", "revocation"))
 
 	svcBundle := &service.ServiceBundle{
 		Emitter:             emitter,
@@ -180,6 +183,7 @@ func newTestServer(t *testing.T, mocks *testMocks) *httptest.Server {
 		Qualification:       qualSvc,
 		PlanningModelMetric: metricSvc,
 		PublicHoliday:       holidaySvc,
+		Revocation:          revocationSvc,
 	}
 
 	cfg := &config.Config{MaxRequestBodyBytes: 10 << 20}

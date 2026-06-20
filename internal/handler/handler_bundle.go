@@ -38,6 +38,7 @@ type HandlerBundle struct {
 	PlanningModelMetric *PlanningModelMetricHandler
 	PublicHoliday       *PublicHolidayHandler
 	StoreException      *StoreExceptionHandler
+	Revocation          *RevocationHandler
 }
 
 // BuildInfo holds the values injected at link time via -ldflags.
@@ -79,6 +80,7 @@ func NewHandlerBundle(svc *service.ServiceBundle, cfg *config.Config, db *gorm.D
 		PlanningModelMetric: NewPlanningModelMetricHandler(svc.PlanningModelMetric),
 		PublicHoliday:       NewPublicHolidayHandler(svc.PublicHoliday),
 		StoreException:      NewStoreExceptionHandler(svc.StoreException),
+		Revocation:          NewRevocationHandler(svc.Revocation, svc.Employee),
 	}
 	// AI handler is optional — only created when the AI service is available.
 	if svc.AI != nil {
