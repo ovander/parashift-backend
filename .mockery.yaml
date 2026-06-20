@@ -1,0 +1,12 @@
+# DX-3: generate testify mocks from interfaces instead of hand-writing them.
+# Pilot scope: StoreExceptionRepository. Add more interfaces here and re-run
+# `mockery` to migrate them off the hand-written testutil mocks incrementally.
+with-expecter: true
+dir: "internal/repo/mocks"
+mockname: "{{.InterfaceName}}"
+outpkg: "mocks"
+filename: "{{.InterfaceName}}.go"
+packages:
+  github.com/ovander/parashift/internal/repo:
+    interfaces:
+      StoreExceptionRepository:
