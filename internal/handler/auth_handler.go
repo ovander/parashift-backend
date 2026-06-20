@@ -178,7 +178,7 @@ func (h *AuthHandler) postToken(form url.Values) (*socrateTokenResponse, error) 
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Socrate returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("socrate returned %d: %s", resp.StatusCode, string(body))
 	}
 
 	var tokens socrateTokenResponse

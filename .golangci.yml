@@ -1,0 +1,40 @@
+# golangci-lint configuration (DX-2).
+# Conservative, high-signal set for an existing production codebase: catch real
+# bugs (unchecked errors, suspicious constructs, dead code) without enforcing
+# opinionated style churn. Tuned so the current tree passes with zero issues.
+version: "2"
+
+linters:
+  # Standard default set: errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    - misspell    # catches typos in comments/strings
+    - bodyclose   # HTTP response bodies must be closed (relevant to our external clients)
+
+  settings:
+    staticcheck:
+      # Keep correctness checks (SA*), style (ST*) and simplifications (S*),
+      # but drop the opinionated "quick-fix" suggestions (QF*) that would force
+      # large stylistic rewrites with no correctness benefit.
+      checks:
+        - all
+        - -QF1003  # tagged switch suggestion
+        - -QF1008  # embedded-field selector
+        - -QF1009  # time.Time comparison suggestion
+        - -QF1011  # omit inferable type
+        - -ST1000  # package comment on every package (not our convention)
+
+  exclusions:
+    # Built-in presets that suppress well-known false positives, including the
+    # idiomatic unchecked errors on Close()/Write()/fmt.* (std-error-handling).
+    presets:
+      - common-false-positives
+      - std-error-handling
+    rules:
+      # Test scaffolding may keep currently-unused helpers and ignores errors
+      # in fixtures/assertions; don't fail the build on those.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - unused
+          - bodyclose

@@ -221,5 +221,5 @@ func (h *MeHandler) ExportICS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/calendar")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"schedule.ics\"")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(icsData))
+	_, _ = w.Write([]byte(icsData))
 }

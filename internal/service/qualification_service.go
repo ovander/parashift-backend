@@ -439,7 +439,7 @@ func empQualToResponse(eq *model.EmployeeQualification) dto.EmployeeQualificatio
 		expiry := eq.ExpiryDate.Format("2006-01-02")
 		resp.ExpiryDate = &expiry
 
-		daysUntilExpiry := int(eq.ExpiryDate.Sub(time.Now()).Hours() / 24)
+		daysUntilExpiry := int(time.Until(*eq.ExpiryDate).Hours() / 24)
 		if daysUntilExpiry >= 0 && daysUntilExpiry <= 30 {
 			resp.ExpiringInDays = &daysUntilExpiry
 		}

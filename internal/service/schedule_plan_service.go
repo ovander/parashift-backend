@@ -408,7 +408,10 @@ func (s *SchedulePlanService) AdvanceState(ctx context.Context, tenantID uuid.UU
 // PlanToResponse converts a SchedulePlan model to its DTO response.
 func (s *SchedulePlanService) PlanToResponse(p *model.SchedulePlan) dto.SchedulePlanResponse {
 	var snapshots []model.PlanSnapshot
-	json.Unmarshal([]byte(p.Snapshots), &snapshots)
+	if err := json.Unmarshal([]byte(p.Snapshots), &snapshots); err != nil {
+		// Corrupt/empty snapshot JSON → treat as no history rather than panicking.
+		snapshots = nil
+	}
 
 	var publishedAt *string
 	if p.PublishedAt != nil {
