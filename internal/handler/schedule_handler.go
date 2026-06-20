@@ -83,6 +83,19 @@ func enforceSelfOrManager(w http.ResponseWriter, r *http.Request, targetEmployee
 	return false
 }
 
+// guardManagerPosition rejects a privilege-escalating write: only a platform
+// admin may set or promote an employee to the "manager" position. A store
+// manager cannot mint or promote other managers (SEC-7 mass-assignment).
+// position is the requested value ("" when the update omits it). Returns false
+// and writes 403 on denial.
+func guardManagerPosition(w http.ResponseWriter, r *http.Request, position string) bool {
+	if position == "manager" && ctxutil.GetUserRole(r.Context()) != "admin" {
+		pkg.WriteError(w, apierror.Forbidden("only an admin may grant the manager position").WithKey("errors.accessDenied"))
+		return false
+	}
+	return true
+}
+
 // shiftToResponse maps *model.ShiftInstance → shiftResponse.
 func shiftToResponse(s *model.ShiftInstance) shiftResponse {
 	return shiftResponse{

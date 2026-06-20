@@ -178,7 +178,9 @@ func TestEmployeeHandler_Create_RepoError(t *testing.T) {
 func TestEmployeeHandler_Update_OK(t *testing.T) {
 	storeID := uuid.New()
 	emp := testutil.NewEmployee(storeID)
-	newRole := "manager"
+	// A manager may update a non-privileged position; promotion to "manager" is
+	// blocked by the SEC-7 guard and covered by the privilege-escalation suite.
+	newRole := "employee"
 
 	empRepo := &testutil.MockEmployeeRepo{
 		GetByIDFn: func(_ context.Context, _, _ uuid.UUID) (*model.Employee, error) { return emp, nil },
