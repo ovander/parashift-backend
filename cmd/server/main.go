@@ -90,6 +90,10 @@ func main() {
 	}
 	res.Services.Emitter.Close()
 	res.Limiter.Stop()
+	// Flush any pending trace spans to the collector (no-op when tracing is off).
+	if err := res.TracerShutdown(ctx); err != nil {
+		logger.WithError(err).Error("tracer shutdown failed")
+	}
 	sqlDB, _ := res.DB.DB()
 	sqlDB.Close()
 	// Flush any buffered Sentry events before the process exits.

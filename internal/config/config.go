@@ -24,6 +24,15 @@ type Config struct {
 	JWKS                JWKSConfig
 	AI                  AIConfig
 	Sentry              SentryConfig
+	Tracing             TracingConfig
+}
+
+// TracingConfig holds OpenTelemetry tracing configuration (OBS-3).
+// Leave Endpoint empty (or unset) to disable tracing entirely.
+type TracingConfig struct {
+	Endpoint    string  // OTLP/HTTP collector address, host:port (no scheme)
+	Insecure    bool    // send over plaintext (dev / in-cluster without TLS)
+	SampleRatio float64 // head sampling ratio 0..1 (1 = sample everything)
 }
 
 // AIConfig holds configuration for the AI gateway (Phase 3).
@@ -101,6 +110,11 @@ func Load() *Config {
 		},
 		Sentry: SentryConfig{
 			DSN: getEnv("SENTRY_DSN", ""),
+		},
+		Tracing: TracingConfig{
+			Endpoint:    getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+			Insecure:    getEnvBool("OTEL_EXPORTER_OTLP_INSECURE", false),
+			SampleRatio: getEnvFloat("OTEL_TRACES_SAMPLER_ARG", 1.0),
 		},
 	}
 }
@@ -189,6 +203,16 @@ func getEnvBool(key string, fallback bool) bool {
 			return true
 		case "false", "no", "0":
 			return false
+		}
+	}
+	return fallback
+}
+
+// getEnvFloat retrieves an environment variable as a float64 or returns a fallback value.
+func getEnvFloat(key string, fallback float64) float64 {
+	if value, ok := os.LookupEnv(key); ok {
+		if f, err := strconv.ParseFloat(value, 64); err == nil {
+			return f
 		}
 	}
 	return fallback

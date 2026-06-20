@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -29,6 +30,7 @@ import (
 	"github.com/ovander/parashift/internal/handler"
 	"github.com/ovander/parashift/internal/middleware"
 	"github.com/ovander/parashift/internal/model"
+	"github.com/ovander/parashift/internal/pkg/tracing"
 	"github.com/ovander/parashift/internal/repo"
 	"github.com/ovander/parashift/internal/router"
 	"github.com/ovander/parashift/internal/service"
@@ -36,10 +38,11 @@ import (
 
 // AppResources holds all live application resources for clean shutdown.
 type AppResources struct {
-	DB       *gorm.DB
-	Services *service.ServiceBundle
-	Server   *http.Server
-	Limiter  *httpware.RateLimiter
+	DB             *gorm.DB
+	Services       *service.ServiceBundle
+	Server         *http.Server
+	Limiter        *httpware.RateLimiter
+	TracerShutdown func(context.Context) error
 }
 
 // initSentry configures the Sentry SDK when SENTRY_DSN is set.
@@ -68,6 +71,23 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 
 	// Step 2.5: Sentry — init before any application code so bootstrap panics are captured
 	initSentry(cfg, logger)
+
+	// Step 2.6: OpenTelemetry tracing (OBS-3). No-op when OTEL_EXPORTER_OTLP_ENDPOINT
+	// is unset; otherwise installs the global tracer provider + propagator.
+	tracerShutdown, err := tracing.Init(context.Background(), tracing.Config{
+		Endpoint:       cfg.Tracing.Endpoint,
+		Insecure:       cfg.Tracing.Insecure,
+		SampleRatio:    cfg.Tracing.SampleRatio,
+		ServiceName:    "parashift-backend",
+		ServiceVersion: build.Version,
+		Environment:    cfg.Env,
+	})
+	if err != nil {
+		entry.WithError(err).Warn("tracing init failed — continuing without tracing")
+		tracerShutdown = func(context.Context) error { return nil }
+	} else if cfg.Tracing.Endpoint != "" {
+		entry.WithField("endpoint", cfg.Tracing.Endpoint).Info("OpenTelemetry tracing enabled")
+	}
 
 	// Step 3: Socrate connectivity checks
 	pingSocrate(cfg, entry)
@@ -155,7 +175,7 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 		IdleTimeout:  60 * time.Second,
 	}
 
-	return &AppResources{DB: db, Services: services, Server: srv, Limiter: limiter}, nil
+	return &AppResources{DB: db, Services: services, Server: srv, Limiter: limiter, TracerShutdown: tracerShutdown}, nil
 }
 
 // newLogger creates and configures a logger instance.
