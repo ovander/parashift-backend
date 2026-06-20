@@ -57,6 +57,21 @@ func (e *Emitter) SubscribeAsync(subscriber Subscriber) {
 	e.asyncSubs = append(e.asyncSubs, subscriber)
 }
 
+// safeHandle dispatches an event to one subscriber with panic isolation, so a
+// faulty subscriber can never crash the publishing goroutine or the async worker
+// (OBS-1). Panics are logged and swallowed.
+func (e *Emitter) safeHandle(sub Subscriber, evt Event) {
+	defer func() {
+		if r := recover(); r != nil && e.logger != nil {
+			e.logger.WithFields(logrus.Fields{
+				"event_type": evt.Type,
+				"panic":      r,
+			}).Error("event subscriber panicked; recovered")
+		}
+	}()
+	sub.Handle(evt)
+}
+
 // Publish sends an event to all registered subscribers.
 func (e *Emitter) Publish(evt Event) {
 	e.mu.RLock()
@@ -66,9 +81,9 @@ func (e *Emitter) Publish(evt Event) {
 		return
 	}
 
-	// Call synchronous subscribers directly
+	// Call synchronous subscribers directly (panic-isolated).
 	for _, sub := range e.syncSubs {
-		sub.Handle(evt)
+		e.safeHandle(sub, evt)
 	}
 
 	// Send to async channel for asynchronous processing
@@ -95,7 +110,7 @@ func (e *Emitter) asyncWorker() {
 		e.mu.RUnlock()
 
 		for _, sub := range asyncSubs {
-			sub.Handle(evt)
+			e.safeHandle(sub, evt)
 		}
 	}
 }

@@ -5,17 +5,20 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ovander/parashift/internal/model"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 // AuditSubscriber writes events to the audit log.
 type AuditSubscriber struct {
-	db *gorm.DB
+	db     *gorm.DB
+	logger *logrus.Entry
 }
 
-// NewAuditSubscriber creates a new audit subscriber.
-func NewAuditSubscriber(db *gorm.DB) *AuditSubscriber {
-	return &AuditSubscriber{db: db}
+// NewAuditSubscriber creates a new audit subscriber. The logger surfaces audit
+// write failures (which were previously swallowed silently — OBS-1).
+func NewAuditSubscriber(db *gorm.DB, logger *logrus.Entry) *AuditSubscriber {
+	return &AuditSubscriber{db: db, logger: logger}
 }
 
 // employeeAuditView is an allow-listed projection of an Employee for the audit
@@ -69,7 +72,14 @@ func (as *AuditSubscriber) Handle(evt Event) {
 		After:        afterBytes,
 	}
 
-	as.db.Create(&auditLog)
+	if err := as.db.Create(&auditLog).Error; err != nil && as.logger != nil {
+		// Surface (don't swallow) audit write failures so they're visible/alertable.
+		as.logger.WithError(err).WithFields(logrus.Fields{
+			"action":        auditLog.Action,
+			"resource_type": auditLog.ResourceType,
+			"tenant_id":     auditLog.TenantID,
+		}).Error("failed to write audit log entry")
+	}
 }
 
 // extractResource derives the resource type and ID from the event payload using

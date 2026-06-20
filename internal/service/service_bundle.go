@@ -49,9 +49,11 @@ func NewServiceBundle(repos *repo.RepoBundle, logger *logrus.Entry, cfgs ...*con
 	emitter := event.NewEmitter()
 	emitter.SetLogger(logger.WithField("component", "event"))
 
-	// Wire audit subscriber
-	auditSub := event.NewAuditSubscriber(repos.DB)
-	emitter.SubscribeAsync(auditSub)
+	// Wire audit subscriber synchronously (OBS-1): inline writes are never
+	// dropped under burst, never lost on crash, and avoid the shared-pointer
+	// data race of async dispatch. Panics are isolated by the emitter.
+	auditSub := event.NewAuditSubscriber(repos.DB, logger.WithField("component", "audit"))
+	emitter.Subscribe(auditSub)
 
 	// Build the rule engine (shared by Schedule and Swap services).
 	ruleEngine := NewRuleEngine(
