@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ovander/backendkit/apierror"
 	"github.com/ovander/parashift/internal/model"
+	"github.com/ovander/parashift/internal/pkg/httpx"
 	"github.com/ovander/parashift/internal/repo"
 	"github.com/sirupsen/logrus"
 )
@@ -105,26 +105,19 @@ func (s *PublicHolidayService) fetchAndStore(ctx context.Context, year int, zone
 	url := fmt.Sprintf("%s/%s/%d.json", s.govAPIBase, zone, year)
 	s.logger.WithField("url", url).Info("fetching public holidays from government API")
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return apierror.Internal("failed to build holiday API request").WithKey("errors.unknown")
-	}
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := s.client.Do(req)
+	// Resilient fetch: retry transient failures (5xx/429/network) with backoff
+	// and cap the response body (OBS-4). On exhaustion the error is returned so
+	// the caller degrades gracefully (holiday checks fall back to "not a holiday").
+	body, err := httpx.GetWithRetry(ctx, s.client, url,
+		map[string]string{"Accept": "application/json"}, httpx.Options{})
 	if err != nil {
 		return fmt.Errorf("holiday API request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("holiday API returned HTTP %d for %s/%d", resp.StatusCode, zone, year)
 	}
 
 	// The government API returns a flat map: {"YYYY-MM-DD": "Nom du jour"}.
 	// Names are already in French — no translation step needed.
 	var raw map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := json.Unmarshal(body, &raw); err != nil {
 		return fmt.Errorf("failed to decode holiday API response: %w", err)
 	}
 
