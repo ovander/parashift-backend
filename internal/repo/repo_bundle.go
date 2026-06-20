@@ -29,6 +29,7 @@ type RepoBundle struct {
 	PlanningModelMetric     PlanningModelMetricRepository
 	PublicHoliday           PublicHolidayRepository
 	StoreException          StoreExceptionRepository
+	TokenRevocation         TokenRevocationRepository
 }
 
 // WithTx runs fn inside a single database transaction (DAT-1). fn receives a
@@ -85,5 +86,6 @@ func NewRepoBundle(db *gorm.DB) *RepoBundle {
 		PlanningModelMetric:     NewPlanningModelMetricRepository(db),
 		PublicHoliday:           NewPublicHolidayRepository(db),
 		StoreException:          NewStoreExceptionRepository(db),
+		TokenRevocation:         NewTokenRevocationRepository(db),
 	}
 }

@@ -73,15 +73,9 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 	pingSocrate(cfg, entry)
 	pingSocrateAdmin(cfg, entry)
 
-	// Step 4a: JWT auth (JWKS) — no error return.
-	// WithAudience rejects tokens not minted for this app's client_id, so a token
-	// issued for another service on the same Socrate issuer cannot be replayed here
-	// (backendkit v1.8.0). Socrate issues an aud claim for this app; without it the
-	// guard would reject every token.
-	jwtMW := jwtauth.New(cfg.JWKS.URL, cfg.JWKS.Issuer, entry,
-		jwtauth.WithAudience(cfg.Socrate.ClientID))
-
-	// Step 4b: Database connection
+	// Step 4: Database connection.
+	// (Auth middleware is built later, after services, so its revocation check can
+	// use the revocation service.)
 	entry.Info("connecting to database")
 	db, err := initDB(cfg, logger)
 	if err != nil {
@@ -112,6 +106,16 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 	repos    := repo.NewRepoBundle(db)
 	services := service.NewServiceBundle(repos, logger.WithField("component", "service"), cfg)
 	handlers := handler.NewHandlerBundle(services, cfg, db, build)
+
+	// Step 9b: JWT auth (JWKS) — built after services so it can enforce revocation.
+	//   - WithAudience rejects tokens not minted for this app's client_id, so a token
+	//     issued for another service on the same Socrate issuer cannot be replayed here.
+	//   - WithRevocationCheck rejects tokens issued before a subject's revocation floor,
+	//     so logout / password-change / admin-revoke take effect before token expiry.
+	// (backendkit v1.8.0)
+	jwtMW := jwtauth.New(cfg.JWKS.URL, cfg.JWKS.Issuer, entry,
+		jwtauth.WithAudience(cfg.Socrate.ClientID),
+		jwtauth.WithRevocationCheck(services.Revocation.CheckToken))
 
 	// Step 10: Middleware
 	tenantMW := middleware.NewTenantMiddleware(repos.Employee, logger.WithField("component", "tenant"), cfg.Socrate.BaseURL)
@@ -448,5 +452,6 @@ func autoMigrate(db *gorm.DB) error {
 		&model.PlanningModelMetric{},
 		&model.PublicHoliday{},
 		&model.StoreException{},
+		&model.TokenRevocation{},
 	)
 }

@@ -806,6 +806,25 @@ func (m *MockPublicHolidayRepo) UpsertBatch(ctx context.Context, holidays []*mod
 	return nil
 }
 
+// MockTokenRevocationRepo is a test double for repo.TokenRevocationRepository.
+type MockTokenRevocationRepo struct {
+	GetBySubFn func(ctx context.Context, sub string) (*model.TokenRevocation, error)
+	UpsertFn   func(ctx context.Context, sub string, revokedAfter time.Time) error
+}
+
+func (m *MockTokenRevocationRepo) GetBySub(ctx context.Context, sub string) (*model.TokenRevocation, error) {
+	if m.GetBySubFn != nil {
+		return m.GetBySubFn(ctx, sub)
+	}
+	return nil, nil
+}
+func (m *MockTokenRevocationRepo) Upsert(ctx context.Context, sub string, revokedAfter time.Time) error {
+	if m.UpsertFn != nil {
+		return m.UpsertFn(ctx, sub, revokedAfter)
+	}
+	return nil
+}
+
 // ─── PlanningModelMetricRepository mock ──────────────────────────────────────
 
 type MockPlanningModelMetricRepo struct {
