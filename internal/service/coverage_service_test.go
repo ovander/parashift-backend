@@ -9,11 +9,27 @@ import (
 	"github.com/google/uuid"
 	"github.com/ovander/parashift/internal/dto"
 	"github.com/ovander/parashift/internal/model"
+	"github.com/ovander/parashift/internal/repo/mocks"
 	"github.com/ovander/parashift/internal/service"
 	"github.com/ovander/parashift/internal/testutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+// newExceptionRepoMock builds a generated (mockery) StoreExceptionRepository whose
+// ListByDateRange returns fn(tenantID). The expectation is optional (.Maybe) so
+// tests that never reach the exception check don't fail (DX-3).
+func newExceptionRepoMock(t *testing.T, fn func(tID uuid.UUID) []*model.StoreException) *mocks.StoreExceptionRepository {
+	t.Helper()
+	m := mocks.NewStoreExceptionRepository(t)
+	m.EXPECT().
+		ListByDateRange(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(_ context.Context, tID uuid.UUID, _, _ time.Time) ([]*model.StoreException, error) {
+			return fn(tID), nil
+		}).Maybe()
+	return m
+}
 
 func newCoverageService(
 	covRepo *testutil.MockCoverageRequirementRepo,
@@ -655,12 +671,8 @@ func TestCoverageService_ComputeForDateRange_HolidaySkipped(t *testing.T) {
 	holidaySvc := newHolidaySvcStub(map[string]string{
 		"2026-04-06": "Lundi de Pâques",
 	})
-	exceptionRepo := &testutil.MockStoreExceptionRepo{
-		// No EXTRA_OPEN exception for this date.
-		ListByDateRangeFn: func(_ context.Context, _ uuid.UUID, _, _ time.Time) ([]*model.StoreException, error) {
-			return nil, nil
-		},
-	}
+	// No EXTRA_OPEN exception for this date.
+	exceptionRepo := newExceptionRepoMock(t, func(uuid.UUID) []*model.StoreException { return nil })
 
 	svc := service.NewCoverageService(covRepo, shiftRepo, &testutil.MockShiftAssignmentRepo{}, &testutil.MockEmployeeRepo{}, newTestEmitter(), newTestLogger()).
 		WithHolidayService(holidaySvc).
@@ -718,13 +730,10 @@ func TestCoverageService_ComputeForDateRange_ExtraOpenOverridesHoliday(t *testin
 	}
 
 	holidaySvc := newHolidaySvcStub(map[string]string{"2026-04-06": "Lundi de Pâques"})
-	exceptionRepo := &testutil.MockStoreExceptionRepo{
-		// EXTRA_OPEN exception for the holiday date.
-		ListByDateRangeFn: func(_ context.Context, tID uuid.UUID, _, _ time.Time) ([]*model.StoreException, error) {
-			ex := testutil.NewStoreException(tID, day, model.ExceptionExtraOpen)
-			return []*model.StoreException{ex}, nil
-		},
-	}
+	// EXTRA_OPEN exception for the holiday date.
+	exceptionRepo := newExceptionRepoMock(t, func(tID uuid.UUID) []*model.StoreException {
+		return []*model.StoreException{testutil.NewStoreException(tID, day, model.ExceptionExtraOpen)}
+	})
 
 	svc := service.NewCoverageService(covRepo, shiftRepo, assignRepo, empRepo, newTestEmitter(), newTestLogger()).
 		WithHolidayService(holidaySvc).
@@ -762,13 +771,10 @@ func TestCoverageService_ComputeForDateRange_ForcedClosedDoesNotOverrideHoliday(
 	}
 
 	holidaySvc := newHolidaySvcStub(map[string]string{"2026-04-06": "Lundi de Pâques"})
-	exceptionRepo := &testutil.MockStoreExceptionRepo{
-		// FORCED_CLOSED exception — must NOT override the holiday skip.
-		ListByDateRangeFn: func(_ context.Context, tID uuid.UUID, _, _ time.Time) ([]*model.StoreException, error) {
-			ex := testutil.NewStoreException(tID, day, model.ExceptionForcedClosed)
-			return []*model.StoreException{ex}, nil
-		},
-	}
+	// FORCED_CLOSED exception — must NOT override the holiday skip.
+	exceptionRepo := newExceptionRepoMock(t, func(tID uuid.UUID) []*model.StoreException {
+		return []*model.StoreException{testutil.NewStoreException(tID, day, model.ExceptionForcedClosed)}
+	})
 
 	svc := service.NewCoverageService(covRepo, shiftRepo, &testutil.MockShiftAssignmentRepo{}, &testutil.MockEmployeeRepo{}, newTestEmitter(), newTestLogger()).
 		WithHolidayService(holidaySvc).
@@ -825,12 +831,9 @@ func TestCoverageService_ComputeForDateRange_ExtraOpenOnNonHoliday(t *testing.T)
 
 	// No public holiday on this Sunday.
 	holidaySvc := newHolidaySvcStub(map[string]string{})
-	exceptionRepo := &testutil.MockStoreExceptionRepo{
-		ListByDateRangeFn: func(_ context.Context, tID uuid.UUID, _, _ time.Time) ([]*model.StoreException, error) {
-			ex := testutil.NewStoreException(tID, day, model.ExceptionExtraOpen)
-			return []*model.StoreException{ex}, nil
-		},
-	}
+	exceptionRepo := newExceptionRepoMock(t, func(tID uuid.UUID) []*model.StoreException {
+		return []*model.StoreException{testutil.NewStoreException(tID, day, model.ExceptionExtraOpen)}
+	})
 
 	svc := service.NewCoverageService(covRepo, shiftRepo, assignRepo, empRepo, newTestEmitter(), newTestLogger()).
 		WithHolidayService(holidaySvc).

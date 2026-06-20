@@ -845,29 +845,5 @@ func (m *MockPlanningModelMetricRepo) Upsert(ctx context.Context, metric *model.
 	return nil
 }
 
-// ─── StoreExceptionRepository mock ───────────────────────────────────────────
-
-type MockStoreExceptionRepo struct {
-	ListByDateRangeFn func(ctx context.Context, tenantID uuid.UUID, from, to time.Time) ([]*model.StoreException, error)
-	CreateFn          func(ctx context.Context, e *model.StoreException) error
-	DeleteFn          func(ctx context.Context, tenantID, id uuid.UUID) error
-}
-
-func (m *MockStoreExceptionRepo) ListByDateRange(ctx context.Context, tenantID uuid.UUID, from, to time.Time) ([]*model.StoreException, error) {
-	if m.ListByDateRangeFn != nil {
-		return m.ListByDateRangeFn(ctx, tenantID, from, to)
-	}
-	return nil, nil
-}
-func (m *MockStoreExceptionRepo) Create(ctx context.Context, e *model.StoreException) error {
-	if m.CreateFn != nil {
-		return m.CreateFn(ctx, e)
-	}
-	return nil
-}
-func (m *MockStoreExceptionRepo) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
-	if m.DeleteFn != nil {
-		return m.DeleteFn(ctx, tenantID, id)
-	}
-	return nil
-}
+// StoreExceptionRepository is mocked via mockery — see internal/repo/mocks
+// (DX-3). The hand-written mock was removed.
