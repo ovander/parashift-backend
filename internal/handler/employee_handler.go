@@ -133,6 +133,11 @@ func (h *EmployeeHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Privilege guard: only an admin may create a manager (SEC-7).
+	if !guardManagerPosition(w, r, req.Position) {
+		return
+	}
+
 	// Service: Create(ctx, tenantID, req dto.CreateEmployeeRequest)
 	employee, err := h.svc.Create(ctx, storeID, req)
 	if err != nil {
@@ -169,6 +174,15 @@ func (h *EmployeeHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var req dto.UpdateEmployeeRequest
 	if err := pkg.DecodeJSON(r, &req); err != nil {
 		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
+		return
+	}
+
+	// Privilege guard: a manager cannot promote an employee to manager (SEC-7).
+	reqPosition := ""
+	if req.Position != nil {
+		reqPosition = *req.Position
+	}
+	if !guardManagerPosition(w, r, reqPosition) {
 		return
 	}
 

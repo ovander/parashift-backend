@@ -80,9 +80,8 @@ func (h *ManagerEmployeeHandler) Create(w http.ResponseWriter, r *http.Request) 
 		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
-	// Manager cannot create other managers — restrict to employee position.
-	if req.Position == "manager" && ctxutil.GetUserRole(ctx) != "admin" {
-		pkg.WriteError(w, apierror.Forbidden("managers cannot create other managers").WithKey("errors.accessDenied"))
+	// Manager cannot create other managers — restrict to employee position (SEC-7).
+	if !guardManagerPosition(w, r, req.Position) {
 		return
 	}
 
@@ -112,9 +111,12 @@ func (h *ManagerEmployeeHandler) Update(w http.ResponseWriter, r *http.Request) 
 		pkg.WriteError(w, apierror.BadRequest("invalid request body").WithKey("errors.invalidInput"))
 		return
 	}
-	// Prevent managers from promoting employees to manager.
-	if req.Position != nil && *req.Position == "manager" && ctxutil.GetUserRole(ctx) != "admin" {
-		pkg.WriteError(w, apierror.Forbidden("managers cannot promote employees to manager").WithKey("errors.accessDenied"))
+	// Prevent managers from promoting employees to manager (SEC-7).
+	reqPosition := ""
+	if req.Position != nil {
+		reqPosition = *req.Position
+	}
+	if !guardManagerPosition(w, r, reqPosition) {
 		return
 	}
 
