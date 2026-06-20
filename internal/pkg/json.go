@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/ovander/backendkit/apierror"
+	"github.com/sirupsen/logrus"
 )
 
 // isDev returns true when APP_ENV is not "production".
@@ -45,5 +46,8 @@ func WriteError(w http.ResponseWriter, err error) {
 		appErr.WriteJSON(w)
 		return
 	}
-	apierror.Internal(err.Error()).WriteJSON(w)
+	// Non-AppError: never leak internal/DB/upstream detail to the client.
+	// Log it server-side and return a generic, i18n-keyed 500 (SEC-8).
+	logrus.WithError(err).Error("unhandled internal error")
+	apierror.Internal("internal server error").WithKey("errors.unknown").WriteJSON(w)
 }
