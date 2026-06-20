@@ -11,6 +11,7 @@ import (
 	"github.com/ovander/parashift/internal/config"
 	"github.com/ovander/parashift/internal/handler"
 	"github.com/ovander/parashift/internal/middleware"
+	"github.com/ovander/parashift/internal/pkg/metrics"
 )
 
 // Middleware holds all HTTP middleware instances.
@@ -36,6 +37,18 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 	r.Use(httpware.BodyLimit(cfg.MaxRequestBodyBytes))
 	r.Use(httpware.Recover(mw.Logger.WithField("component", "recover")))
 	r.Use(middleware.Locale) // T1.5: inject Accept-Language locale into request context
+
+	// Prometheus RED metrics (OBS-2). Gated by METRICS_ENABLED. When enabled, a
+	// middleware records request rate/errors/duration for every matched route and
+	// /metrics exposes the exposition format for scraping. The endpoint is kept at
+	// root (no auth) so an in-cluster Prometheus can scrape it; restrict exposure
+	// at the network layer rather than with app auth.
+	if cfg.MetricsEnabled {
+		mc := metrics.New()
+		r.Use(mc.Middleware)
+		r.Method(http.MethodGet, "/metrics", mc.Handler())
+		mw.Logger.Info("metrics: Prometheus /metrics endpoint enabled")
+	}
 
 	// Public routes (no auth required) — kept at root so auth store can call them
 	// without the /api/v1 prefix.
