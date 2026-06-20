@@ -6,33 +6,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/time/rate"
 
 	"github.com/ovander/backendkit/httpware"
 	"github.com/ovander/parashift/internal/config"
 	"github.com/ovander/parashift/internal/handler"
 	"github.com/ovander/parashift/internal/middleware"
 )
-
-// globalAuthLimiter returns a middleware that enforces a process-wide token-bucket
-// limit on the endpoint it wraps. Unlike httpware.RateLimiter, it does not require
-// a tenant ID in context, making it suitable for pre-authentication endpoints such
-// as /auth/callback and /auth/refresh.
-func globalAuthLimiter(rps float64, burst int) func(http.Handler) http.Handler {
-	lim := rate.NewLimiter(rate.Limit(rps), burst)
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !lim.Allow() {
-				w.Header().Set("Retry-After", "1")
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusTooManyRequests)
-				w.Write([]byte(`{"error":{"code":"rate_limited","message":"too many requests"}}`)) //nolint:errcheck
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-}
 
 // Middleware holds all HTTP middleware instances.
 type Middleware struct {
@@ -65,11 +44,11 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 	r.Get("/api/version", handlers.Version.Get)
 
 	// Auth endpoints are public but rate-limited to resist brute-force and
-	// credential-stuffing. A global (not per-tenant) limiter is used here because
+	// credential-stuffing. A per-IP (not per-tenant) limiter is used here because
 	// tenant context is not yet available at this stage of the request lifecycle.
-	// 20 req/s burst 40 comfortably handles a busy load-balanced deployment while
-	// still stopping automated attacks.
-	authLim := globalAuthLimiter(20, 40)
+	// Keying per source IP (20 req/s, burst 40) stops automated attacks from a
+	// single origin without letting one abuser lock out everyone else (SEC-3).
+	authLim := newIPRateLimiter(20, 40).middleware
 	r.With(authLim).Post("/auth/callback", handlers.Auth.Callback)
 	r.With(authLim).Post("/auth/refresh", handlers.Auth.Refresh)
 	r.Post("/auth/logout", handlers.Auth.Logout)
