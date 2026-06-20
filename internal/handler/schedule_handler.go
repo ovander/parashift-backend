@@ -65,6 +65,24 @@ func validateStoreTenant(tenantID, storeID uuid.UUID, role string) bool {
 	return storeID == tenantID || role == "admin"
 }
 
+// isManagerRole reports whether the role may act on behalf of other employees
+// (managers and platform admins). Plain employees may only act on themselves.
+func isManagerRole(role string) bool {
+	return role == "manager" || role == "admin"
+}
+
+// enforceSelfOrManager authorizes object-level access to a per-employee
+// resource: managers/admins may act on anyone in their tenant, an employee only
+// on their own record. On denial it writes 403 and returns false (SEC-5 / BOLA).
+func enforceSelfOrManager(w http.ResponseWriter, r *http.Request, targetEmployeeID uuid.UUID) bool {
+	ctx := r.Context()
+	if isManagerRole(ctxutil.GetUserRole(ctx)) || ctxutil.GetUserID(ctx) == targetEmployeeID {
+		return true
+	}
+	pkg.WriteError(w, apierror.Forbidden("access denied to this resource").WithKey("errors.accessDenied"))
+	return false
+}
+
 // shiftToResponse maps *model.ShiftInstance → shiftResponse.
 func shiftToResponse(s *model.ShiftInstance) shiftResponse {
 	return shiftResponse{

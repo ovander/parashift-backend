@@ -100,7 +100,14 @@ func (h *SwapHandler) List(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	params := pagination.Parse(r)
 
-	swapRequests, total, err := h.svc.ListByStore(ctx, storeID, status, params.Page, params.PerPage)
+	// Employees see only their own swap requests; managers/admins see the store.
+	var swapRequests []*model.SwapRequest
+	var total int64
+	if isManagerRole(ctxutil.GetUserRole(ctx)) {
+		swapRequests, total, err = h.svc.ListByStore(ctx, storeID, status, params.Page, params.PerPage)
+	} else {
+		swapRequests, total, err = h.svc.ListByEmployee(ctx, storeID, ctxutil.GetUserID(ctx), params.Page, params.PerPage)
+	}
 	if err != nil {
 		pkg.WriteError(w, err)
 		return
@@ -140,6 +147,18 @@ func (h *SwapHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		pkg.WriteError(w, err)
 		return
+	}
+
+	// Object-level authz: only the requester, the swap target, or a
+	// manager/admin may read a swap request (SEC-5).
+	if !isManagerRole(ctxutil.GetUserRole(ctx)) {
+		callerID := ctxutil.GetUserID(ctx)
+		isParty := swapRequest.RequesterID == callerID ||
+			(swapRequest.TargetEmployeeID != nil && *swapRequest.TargetEmployeeID == callerID)
+		if !isParty {
+			pkg.WriteError(w, apierror.Forbidden("access denied to this resource").WithKey("errors.accessDenied"))
+			return
+		}
 	}
 
 	pkg.WriteJSON(w, http.StatusOK, toSwapResponse(swapRequest))
