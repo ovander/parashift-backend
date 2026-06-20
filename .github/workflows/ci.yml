@@ -16,8 +16,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-test:
-    name: build · vet · lint · test
+  # Lint runs on Go 1.25 to match the go.mod language version. golangci-lint v2.5.0
+  # is itself built with Go 1.25 and cannot analyse packages compiled by the 1.26
+  # toolchain (it panics), so lint is deliberately kept on 1.25 — separate from the
+  # build/test job, which runs on 1.26.4 to ship a CVE-patched stdlib.
+  lint:
+    name: lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,16 +33,31 @@ jobs:
           go-version: '1.25'
           cache: true
 
+      - name: Lint (golangci-lint)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.5.0
+
+  build-test:
+    name: build · vet · test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Build/test on Go 1.26.4: this is the toolchain that compiles the stdlib into
+      # the binary, clearing the 11 stdlib CVEs addressed by backendkit v1.8.0.
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.4'
+          cache: true
+
       - name: Build
         run: go build ./...
 
       - name: Vet
         run: go vet ./...
-
-      - name: Lint (golangci-lint)
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.5.0
 
       - name: Test (race + coverage)
         run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
