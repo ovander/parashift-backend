@@ -91,9 +91,9 @@ func (r *shiftInstanceRepository) CreateBatch(ctx context.Context, shifts []*mod
 	return r.db.WithContext(ctx).CreateInBatches(shifts, 100).Error
 }
 
-// Update updates an existing shift.
+// Update updates an existing shift with optimistic-lock guarding (ARC-3).
 func (r *shiftInstanceRepository) Update(ctx context.Context, s *model.ShiftInstance) error {
-	return r.db.WithContext(ctx).Save(s).Error
+	return updateOptimistic(r.db, ctx, s)
 }
 
 // Delete deletes a shift by tenant and ID.

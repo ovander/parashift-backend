@@ -24,6 +24,7 @@ const (
 // ShiftInstance represents a specific shift on a given date and time.
 type ShiftInstance struct {
 	TenantScoped
+	Versioned
 	Date                  time.Time  `gorm:"type:date;not null;index"`
 	StartTime             string     `gorm:"not null"` // HH:MM
 	EndTime               string     `gorm:"not null"` // HH:MM

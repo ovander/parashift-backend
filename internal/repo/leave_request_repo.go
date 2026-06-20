@@ -103,9 +103,9 @@ func (r *leaveRequestRepository) Create(ctx context.Context, lr *model.LeaveRequ
 	return r.db.WithContext(ctx).Create(lr).Error
 }
 
-// Update updates an existing leave request.
+// Update updates an existing leave request with optimistic-lock guarding (ARC-3).
 func (r *leaveRequestRepository) Update(ctx context.Context, lr *model.LeaveRequest) error {
-	return r.db.WithContext(ctx).Save(lr).Error
+	return updateOptimistic(r.db, ctx, lr)
 }
 
 // Delete removes a leave request by tenant and ID.

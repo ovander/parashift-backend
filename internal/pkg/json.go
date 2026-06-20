@@ -2,11 +2,13 @@ package pkg
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 
 	"github.com/ovander/backendkit/apierror"
+	"github.com/ovander/parashift/internal/repo"
 	"github.com/sirupsen/logrus"
 )
 
@@ -44,6 +46,12 @@ func WriteError(w http.ResponseWriter, err error) {
 			))
 		}
 		appErr.WriteJSON(w)
+		return
+	}
+	// Optimistic-lock conflict → 409 so the client can refetch and retry (ARC-3).
+	if errors.Is(err, repo.ErrOptimisticLock) {
+		apierror.Conflict("the record was modified by someone else; please reload and try again").
+			WithKey("errors.conflict").WriteJSON(w)
 		return
 	}
 	// Non-AppError: never leak internal/DB/upstream detail to the client.

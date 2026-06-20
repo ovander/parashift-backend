@@ -18,6 +18,7 @@ const (
 // SwapRequest represents a request to swap shifts between employees or with an open slot.
 type SwapRequest struct {
 	TenantScoped
+	Versioned
 	RequesterID       uuid.UUID  `gorm:"type:uuid;not null;index"`
 	TargetEmployeeID  *uuid.UUID `gorm:"type:uuid"` // null means swap with an open slot
 	ShiftInstanceID   uuid.UUID  `gorm:"type:uuid;not null"`

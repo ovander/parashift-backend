@@ -264,7 +264,7 @@ func (s *EmployeeService) ClaimByToken(ctx context.Context, token, sub, callerEm
 
 	if err := s.repo.Update(ctx, emp); err != nil {
 		logger.WithError(err).Error("failed to claim employee record")
-		return nil, apierror.Internal("failed to claim invite").WithKey("errors.unknown")
+		return nil, optimisticErr(err, apierror.Internal("failed to claim invite").WithKey("errors.unknown"))
 	}
 
 	return emp, nil
@@ -308,7 +308,7 @@ func (s *EmployeeService) Update(ctx context.Context, tenantID, id uuid.UUID, re
 	emp.UpdatedAt = time.Now()
 	if err := s.repo.Update(ctx, emp); err != nil {
 		logger.WithError(err).Error("failed to update employee")
-		return nil, apierror.Internal("failed to update employee").WithKey("errors.unknown")
+		return nil, optimisticErr(err, apierror.Internal("failed to update employee").WithKey("errors.unknown"))
 	}
 
 	// Publish event
@@ -398,7 +398,7 @@ func (s *EmployeeService) UpdateGlobal(ctx context.Context, id uuid.UUID, req dt
 
 	if err := s.repo.Update(ctx, emp); err != nil {
 		logger.WithError(err).Error("failed to update employee globally")
-		return nil, apierror.Internal("failed to update employee").WithKey("errors.unknown")
+		return nil, optimisticErr(err, apierror.Internal("failed to update employee").WithKey("errors.unknown"))
 	}
 
 	s.emitter.Publish(event.Event{

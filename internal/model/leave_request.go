@@ -24,6 +24,7 @@ const (
 // LeaveRequest represents an employee's request for time off.
 type LeaveRequest struct {
 	TenantScoped
+	Versioned
 	EmployeeID  uuid.UUID  `gorm:"type:uuid;not null;index"`
 	StartDate   time.Time  `gorm:"type:date;not null"`
 	EndDate     time.Time  `gorm:"type:date;not null"`

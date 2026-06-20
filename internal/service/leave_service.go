@@ -134,7 +134,7 @@ func (s *LeaveService) ReviewLeaveRequest(ctx context.Context, tenantID, id uuid
 
 	if err := s.repo.Update(ctx, leave); err != nil {
 		logger.WithError(err).Error("failed to update leave request")
-		return nil, apierror.Internal("failed to update leave request").WithKey("errors.unknown")
+		return nil, optimisticErr(err, apierror.Internal("failed to update leave request").WithKey("errors.unknown"))
 	}
 
 	// If approved, cancel assignments in the leave period

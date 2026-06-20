@@ -141,7 +141,7 @@ func (s *SwapService) ReviewSwapRequest(ctx context.Context, tenantID, id uuid.U
 
 	if err := s.repo.Update(ctx, swapRequest); err != nil {
 		logger.WithError(err).Error("failed to update swap request")
-		return nil, apierror.Internal("failed to update swap request").WithKey("errors.unknown")
+		return nil, optimisticErr(err, apierror.Internal("failed to update swap request").WithKey("errors.unknown"))
 	}
 
 	// If accepted, run rule engine validation before performing the swap.
