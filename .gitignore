@@ -49,9 +49,8 @@ docker-compose.override.yml
 # 📊 Temp / runtime
 tmp/
 *.tmpapp
-app
 
-# binaries
-server
-app
+# binaries (repo-root only — anchored so they don't match cmd/server/, internal/app, etc.)
+/server
+/app
 *.exe
