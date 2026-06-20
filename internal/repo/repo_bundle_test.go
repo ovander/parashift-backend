@@ -58,6 +58,23 @@ func TestWithTx_RollsBackOnError(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+// DAT-3: AdvisoryXactLock issues a Postgres advisory-lock statement with the key.
+func TestAdvisoryXactLock_IssuesLockSQL(t *testing.T) {
+	b, mock := newMockBundle(t)
+	mock.ExpectExec("pg_advisory_xact_lock").WithArgs(int64(4242)).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	err := b.AdvisoryXactLock(context.Background(), 4242)
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// AdvisoryXactLock is a safe no-op on a nil-DB bundle (fake bundles in tests).
+func TestAdvisoryXactLock_NilDBIsNoop(t *testing.T) {
+	b := &repo.RepoBundle{}
+	assert.NoError(t, b.AdvisoryXactLock(context.Background(), 1))
+}
+
 // DAT-1: a panic inside fn also rolls back (gorm recovers and re-panics).
 func TestWithTx_RollsBackOnPanic(t *testing.T) {
 	b, mock := newMockBundle(t)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"time"
 
@@ -20,6 +21,15 @@ import (
 // TxRunner executes fn inside a single DB transaction, passing tx-bound repos.
 // *repo.RepoBundle.WithTx satisfies this; tests can supply a fake.
 type TxRunner func(ctx context.Context, fn func(tx *repo.RepoBundle) error) error
+
+// scheduleLockKey derives a stable advisory-lock key from the tenant ID so that
+// concurrent generate/regenerate operations for the same tenant are serialized
+// (DAT-3 idempotency).
+func scheduleLockKey(tenantID uuid.UUID) int64 {
+	h := fnv.New64a()
+	_, _ = h.Write(tenantID[:])
+	return int64(h.Sum64())
+}
 
 // ScheduleService is the core scheduling domain service.
 type ScheduleService struct {
@@ -218,6 +228,11 @@ func (s *ScheduleService) ProjectABSchedule(ctx context.Context, tenantID uuid.U
 	if s.txRunner != nil {
 		var count int
 		err := s.txRunner(ctx, func(tx *repo.RepoBundle) error {
+			// Serialize concurrent generate/regenerate per tenant so duplicate
+			// requests don't double-insert (idempotent generation, DAT-3).
+			if err := tx.AdvisoryXactLock(ctx, scheduleLockKey(tenantID)); err != nil {
+				return err
+			}
 			c, e := s.projectABSchedule(ctx, tenantID, req, tx.ShiftInstance, tx.ShiftAssignment)
 			count = c
 			return e
@@ -524,6 +539,9 @@ func (s *ScheduleService) RegenerateWeek(ctx context.Context, tenantID uuid.UUID
 	var err error
 	if s.txRunner != nil {
 		err = s.txRunner(ctx, func(tx *repo.RepoBundle) error {
+			if lockErr := tx.AdvisoryXactLock(ctx, scheduleLockKey(tenantID)); lockErr != nil {
+				return lockErr
+			}
 			count, err = regen(tx.ShiftInstance, tx.ShiftAssignment)
 			return err
 		})
@@ -543,6 +561,11 @@ func (s *ScheduleService) RegenerateWeek(ctx context.Context, tenantID uuid.UUID
 // If no shifts exist for the requested period, it automatically projects the
 // employees' A/B week templates so the planner always shows a populated week
 // without requiring a manual "generate" step.
+// GetSchedule is a READ-ONLY query: it returns the shifts for the range and
+// never mutates the database (DAT-3). Generating a schedule for an empty week is
+// an explicit action via POST .../shifts/generate (ProjectABSchedule). Removing
+// the previous auto-projection eliminates write-on-GET and the concurrent-GET
+// race that produced duplicate shifts.
 func (s *ScheduleService) GetSchedule(ctx context.Context, tenantID uuid.UUID, dateFrom, dateTo time.Time, page, pageSize int) ([]*model.ShiftInstance, int64, error) {
 	logger := ctxutil.GetLogger(ctx)
 
@@ -550,26 +573,6 @@ func (s *ScheduleService) GetSchedule(ctx context.Context, tenantID uuid.UUID, d
 	if err != nil {
 		logger.WithError(err).Error("failed to get schedule")
 		return nil, 0, apierror.Internal("failed to get schedule").WithKey("errors.unknown")
-	}
-
-	if total == 0 {
-		// No shifts for this week — auto-project from A/B templates.
-		// Errors are non-fatal: a store with no templates simply gets an empty week.
-		count, projErr := s.ProjectABSchedule(ctx, tenantID, dto.GenerateScheduleRequest{
-			DateFrom: dateFrom,
-			DateTo:   dateTo,
-		})
-		if projErr != nil {
-			logger.WithError(projErr).Warn("auto-projection failed — returning empty week")
-			return nil, 0, nil
-		}
-		if count > 0 {
-			shifts, total, err = s.shiftRepo.ListByDateRange(ctx, tenantID, dateFrom, dateTo, page, pageSize)
-			if err != nil {
-				logger.WithError(err).Error("failed to re-fetch schedule after auto-projection")
-				return nil, 0, apierror.Internal("failed to get schedule").WithKey("errors.unknown")
-			}
-		}
 	}
 
 	return shifts, total, nil
