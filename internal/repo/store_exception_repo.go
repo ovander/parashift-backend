@@ -9,13 +9,15 @@ import (
 	"gorm.io/gorm"
 )
 
+// storeExceptionRepository embeds the generic tenant repository for
+// Create/Delete (ARC-2) and adds a date-range query.
 type storeExceptionRepository struct {
-	db *gorm.DB
+	TenantRepository[model.StoreException]
 }
 
 // NewStoreExceptionRepository creates a new StoreExceptionRepository.
 func NewStoreExceptionRepository(db *gorm.DB) StoreExceptionRepository {
-	return &storeExceptionRepository{db: db}
+	return &storeExceptionRepository{NewTenantRepository[model.StoreException](db)}
 }
 
 func (r *storeExceptionRepository) ListByDateRange(ctx context.Context, tenantID uuid.UUID, from, to time.Time) ([]*model.StoreException, error) {
@@ -27,14 +29,4 @@ func (r *storeExceptionRepository) ListByDateRange(ctx context.Context, tenantID
 		return nil, err
 	}
 	return exceptions, nil
-}
-
-func (r *storeExceptionRepository) Create(ctx context.Context, e *model.StoreException) error {
-	return r.db.WithContext(ctx).Create(e).Error
-}
-
-func (r *storeExceptionRepository) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
-	return r.db.WithContext(ctx).
-		Where("id = ? AND tenant_id = ?", id, tenantID).
-		Delete(&model.StoreException{}).Error
 }
