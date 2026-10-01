@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- An API error without an i18n key no longer panics (and answers 500) in production: the
+  development guard read `APP_ENV`, which nothing sets, instead of `ENV`.
 - `scripts/deploy-backend.sh` health-checks `http://127.0.0.1:$PORT/healthz` (PORT from the
   env file, default 4000) instead of `localhost:8081/health`, which made every deploy roll back,
   and reads the deployed version from `/api/version` instead of starting a second server.

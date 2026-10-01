@@ -42,3 +42,18 @@ func TestWriteError_PreservesAppError(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Contains(t, rec.Body.String(), "errors.invalidInput")
 }
+
+// CR-5 guard: an AppError without an i18n key panics in development and tests,
+// but in production it must be answered with its own status, not turned into a
+// panic and a 500. The guard used to read APP_ENV, which nothing sets.
+func TestWriteError_MissingKeyGuardFollowsENV(t *testing.T) {
+	keyless := func() error { return apierror.BadRequest("no key") }
+
+	t.Setenv("ENV", "development")
+	assert.Panics(t, func() { pkg.WriteError(httptest.NewRecorder(), keyless()) })
+
+	t.Setenv("ENV", "production")
+	rec := httptest.NewRecorder()
+	assert.NotPanics(t, func() { pkg.WriteError(rec, keyless()) })
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
