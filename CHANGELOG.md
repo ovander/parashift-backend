@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING:** `POST /auth/callback`, `/auth/refresh` and `/auth/logout`, the last routes that
+  returned tokens to the browser, and `SOCRATE_REDIRECT_URL`, which only they read. `/api/v1`
+  takes a BFF session only: a bearer without a session is refused (401). In production the API
+  refuses to start without the BFF. A test pins every route outside `/api/v1` (report rows S3,
+  K7). Deploy after web app v3.0.0, which no longer calls them.
+
 ### Added
 
 - `docs/SOCRATE-MIGRATION-2026-10-01.md`: the retrospective of the move to the new Socrate (final

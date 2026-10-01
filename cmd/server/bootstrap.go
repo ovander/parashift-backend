@@ -149,6 +149,11 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 	limiter := httpware.NewRateLimiter(100, 200)
 
 	bffRoutes, stopBFF := newBFF(cfg, services, logger.WithField("component", "bff"))
+	// Without the BFF nothing puts a session in front of /api/v1 and a bare
+	// bearer would pass: production refuses to start rather than run that way.
+	if bffRoutes == nil && cfg.Env == config.EnvProduction {
+		return nil, fmt.Errorf("bff: not configured in production (BFF_REDIRECT_URL and the Socrate client are required)")
+	}
 
 	mw := router.Middleware{
 		// jwtauth validates the token; AppRole then replaces its role with
@@ -201,10 +206,10 @@ const bffSweepInterval = time.Minute
 // expired sessions. The store is per process: one instance, and a restart
 // signs everyone out.
 //
-// It returns nil (the API then takes bearer tokens only, as before) when
-// BFF_REDIRECT_URL is unset, which Validate allows outside production only.
-// During the transition to the BFF, /api/v1 still accepts a bearer without a
-// session, so the current SPA keeps working.
+// It returns nil when BFF_REDIRECT_URL is unset or the Socrate client is not
+// configured: the API then takes bearer tokens only, for development without
+// Socrate. bootstrap refuses that in production. With the BFF, /api/v1 takes a
+// session only.
 func newBFF(cfg *config.Config, services *service.ServiceBundle, log *logrus.Entry) (*router.BFF, func()) {
 	if !cfg.BFF.Enabled() {
 		log.Info("BFF disabled: BFF_REDIRECT_URL not set; the API takes bearer tokens only")
@@ -251,9 +256,9 @@ func newBFF(cfg *config.Config, services *service.ServiceBundle, log *logrus.Ent
 		"idle_ttl":     cfg.BFF.IdleTTL.String(),
 		"absolute_ttl": cfg.BFF.AbsoluteTTL.String(),
 		"redirect_uri": cfg.BFF.RedirectURL,
-	}).Info("BFF enabled: /bff routes; /api/v1 takes a session or, during the transition, a bearer")
+	}).Info("BFF enabled: /bff routes; /api/v1 takes a session only")
 	var once sync.Once
-	return &router.BFF{Handler: h, Session: middleware.NewSessionAuth(gw, true, log)},
+	return &router.BFF{Handler: h, Session: middleware.NewSessionAuth(gw, log)},
 		func() { once.Do(func() { close(stop) }) }
 }
 

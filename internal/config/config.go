@@ -55,7 +55,6 @@ type SocrateConfig struct {
 	ClientID     string
 	ClientSecret string
 	AppID        string
-	RedirectURL  string
 }
 
 // BFFConfig configures the Backend-for-Frontend: the server-side sign-in flow
@@ -120,7 +119,6 @@ func Load() *Config {
 			ClientID:     getEnv("SOCRATE_CLIENT_ID", ""),
 			ClientSecret: getEnv("SOCRATE_CLIENT_SECRET", ""),
 			AppID:        getEnv("SOCRATE_APP_ID", ""),
-			RedirectURL:  getEnv("SOCRATE_REDIRECT_URL", ""),
 		},
 		BFF: BFFConfig{
 			RedirectURL:    getEnv("BFF_REDIRECT_URL", ""),

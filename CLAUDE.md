@@ -41,8 +41,9 @@ belongs to one.
 - **BFF.** The browser signs in through `/bff` and holds only the HttpOnly session cookie and a
   CSRF token; tokens stay in the server-side session (`bff.Gateway`). Never add a route that
   returns a token. `middleware.SessionAuth` turns the session into the bearer in front of
-  `/api/v1`; keep CSRF on unsafe methods and the `__Host-` cookie. The bearer-without-session
-  path exists only until the SPA has moved (report rows S2, S3).
+  `/api/v1`; keep CSRF on unsafe methods and the `__Host-` cookie. A bearer without a session is
+  refused, and production does not start without the BFF; `router_no_token_test.go` pins every
+  route outside `/api/v1` (report rows S2, S3).
 - **Migrations.** A schema change is a new numbered pair in `migrations/` (`make migrate-create`)
   with a working `down`. Never edit a released migration. `AUTO_MIGRATE` is development-only.
 - **Never weaken a gate** to get green: no skipped or deleted tests, no `//nolint` or `t.Skip`
