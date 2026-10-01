@@ -142,7 +142,8 @@ Ranked most severe first. *Fix* names the PR in the plan (§6) that closes the r
 |---|---|
 | S1 | Placeholders merged (#55). The secret now set on the VPS differs from the committed one; **owner: confirm the old one (`As6N…`) is revoked at Socrate** |
 | S8 | Fixed in PR 2: auto-link reads the profile through `socrate.Client.GetProfile` and links only when Socrate has verified the address |
-| S2–S7, S9, S10 | open |
+| S5 | Fixed in PR 5: `middleware.AttributionIP` trusts `X-Forwarded-For` from a loopback peer only (rightmost non-loopback entry); the per-IP limiters key on it, and `SocrateClientAttribution` sends it to Socrate |
+| S2–S4, S6, S7, S9, S10 | open |
 | K1, K6 | Fixed in PR 2: backendkit v1.15.1; every Socrate call through `socrate.Client`; the admin probe and the JWT decoding are gone; the JWKS GET is the one documented start-up check |
 | K2–K5, K7 | open |
 | D1–D4, D6, D7 | open |

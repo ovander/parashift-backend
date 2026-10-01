@@ -1,13 +1,13 @@
 package router
 
 import (
-	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
+
+	"github.com/ovander/parashift/internal/middleware"
 )
 
 // ipRateLimiter enforces a token-bucket rate limit keyed per client IP.
@@ -72,7 +72,7 @@ func (l *ipRateLimiter) limiterFor(ip string, now time.Time) *rate.Limiter {
 // middleware returns a chi-compatible middleware enforcing the per-IP limit.
 func (l *ipRateLimiter) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !l.limiterFor(clientIP(r), time.Now()).Allow() {
+		if !l.limiterFor(middleware.RateLimitKey(r), time.Now()).Allow() {
 			w.Header().Set("Retry-After", "1")
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
@@ -81,20 +81,4 @@ func (l *ipRateLimiter) middleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-// clientIP extracts the originating client IP. Behind the reverse proxy (Caddy)
-// the real client is the left-most entry of X-Forwarded-For; otherwise fall back
-// to the connection's RemoteAddr.
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if first := strings.TrimSpace(strings.Split(xff, ",")[0]); first != "" {
-			return first
-		}
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }

@@ -33,6 +33,10 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 	// Global middleware
 	r.Use(middleware.CORS(cfg.AllowedOrigins))
 	r.Use(httpware.RequestID)
+	// Socrate calls made on a user's behalf (code exchange, refresh, revocation)
+	// carry the browser's address, resolved from a loopback-trusted
+	// X-Forwarded-For; never the browser's own header (report row S5).
+	r.Use(middleware.SocrateClientAttribution())
 	r.Use(httpware.Logger(mw.Logger))
 	// Tracing runs after Logger (so it enriches the request logger with trace_id)
 	// and outside Recover (so panics surface as 5xx spans). It is a no-op span when
@@ -242,7 +246,7 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 			// Gated by PermPlatformAdmin — granted ONLY to the platform "admin" role —
 			// so tenant-scoped managers (who hold PermManageStore) cannot reach the
 			// cross-tenant admin surface (employee/store/audit CRUD across tenants).
-			r.With(httpware.Timeout(10 * time.Second)).Route("/admin", func(r chi.Router) {
+			r.With(httpware.Timeout(10*time.Second)).Route("/admin", func(r chi.Router) {
 				r.Use(mw.RBAC.Require(middleware.PermPlatformAdmin))
 
 				// Dashboard
@@ -283,7 +287,7 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 			})
 
 			// Manager routes — store-scoped via JWT context (TenantMiddleware already applied)
-			r.With(httpware.Timeout(5 * time.Second)).Route("/manager", func(r chi.Router) {
+			r.With(httpware.Timeout(5*time.Second)).Route("/manager", func(r chi.Router) {
 				r.Use(httpware.RequireTenant) // tenant-scoped: never run without a tenant
 				r.Use(mw.RBAC.Require(middleware.PermManageEmployees))
 				r.Get("/employees", handlers.ManagerEmployee.List)

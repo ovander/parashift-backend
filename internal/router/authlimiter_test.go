@@ -17,7 +17,9 @@ func TestIPRateLimiter_PerIPIsolation(t *testing.T) {
 	h := lim.middleware(next)
 
 	call := func(ip string) int {
+		// Behind Caddy: the peer is loopback and Caddy appends the browser.
 		req := httptest.NewRequest(http.MethodPost, "/auth/callback", nil)
+		req.RemoteAddr = "127.0.0.1:5000"
 		req.Header.Set("X-Forwarded-For", ip)
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
@@ -33,28 +35,24 @@ func TestIPRateLimiter_PerIPIsolation(t *testing.T) {
 		"a second IP must not be throttled by the first IP's abuse")
 }
 
-func TestClientIP(t *testing.T) {
-	cases := []struct {
-		name string
-		xff  string
-		ra   string
-		want string
-	}{
-		{"xff single", "203.0.113.7", "10.0.0.1:5000", "203.0.113.7"},
-		{"xff chain takes left-most", "203.0.113.7, 70.0.0.1", "10.0.0.1:5000", "203.0.113.7"},
-		{"no xff falls back to remoteaddr host", "", "10.0.0.1:5000", "10.0.0.1"},
-		{"remoteaddr without port", "", "10.0.0.1", "10.0.0.1"},
+// S5: a browser cannot reset its bucket by writing X-Forwarded-For; only the
+// entry Caddy appends (rightmost, from a loopback peer) counts.
+func TestIPRateLimiter_SpoofedForwardedForDoesNotEscape(t *testing.T) {
+	lim := newIPRateLimiter(0.0001, 1)
+	h := lim.middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+
+	call := func(spoofed string) int {
+		req := httptest.NewRequest(http.MethodPost, "/auth/callback", nil)
+		req.RemoteAddr = "127.0.0.1:5000"
+		req.Header.Set("X-Forwarded-For", spoofed+", 203.0.113.7")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
-			req.RemoteAddr = tc.ra
-			if tc.xff != "" {
-				req.Header.Set("X-Forwarded-For", tc.xff)
-			}
-			assert.Equal(t, tc.want, clientIP(req))
-		})
-	}
+
+	assert.Equal(t, http.StatusOK, call("1.1.1.1"))
+	assert.Equal(t, http.StatusTooManyRequests, call("9.9.9.9"),
+		"a new left-most X-Forwarded-For value must not open a new bucket")
 }
 
 // Stale entries are evicted so the visitor map cannot grow unbounded.
