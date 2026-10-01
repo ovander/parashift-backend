@@ -24,6 +24,16 @@ type Middleware struct {
 	RBAC           *middleware.RBACMiddleware
 	GeneralLimiter *httpware.RateLimiter
 	Logger         *logrus.Logger
+	// BFF adds the /bff routes and the session middleware in front of the
+	// authenticated /api/v1 routes. Nil (BFF not configured) leaves both out.
+	BFF *BFF
+}
+
+// BFF is the Backend-for-Frontend wiring: the /bff routes and the session
+// middleware that turns the session cookie into the bearer Auth validates.
+type BFF struct {
+	Handler *handler.BFFHandler
+	Session *middleware.SessionAuth
 }
 
 // NewRouter creates and configures the main HTTP router.
@@ -75,6 +85,19 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 	r.With(authLim).Post("/auth/refresh", handlers.Auth.Refresh)
 	r.Post("/auth/logout", handlers.Auth.Logout)
 
+	// Backend-for-Frontend: server-side sign-in and session (cookie + CSRF).
+	// Tokens stay on the server; the browser gets an HttpOnly session cookie.
+	// Every response is Cache-Control: no-store (BFFHandler).
+	if mw.BFF != nil && mw.BFF.Handler != nil {
+		r.Route("/bff", func(r chi.Router) {
+			r.Use(authLim)
+			r.Get("/login", mw.BFF.Handler.Login)
+			r.Get("/callback", mw.BFF.Handler.Callback)
+			r.Get("/session", mw.BFF.Handler.Session)
+			r.Post("/logout", mw.BFF.Handler.Logout)
+		})
+	}
+
 	// All versioned API routes live under /api/v1 to match frontend axios calls.
 	r.Route("/api/v1", func(r chi.Router) {
 
@@ -86,6 +109,11 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 
 		// Authenticated routes
 		r.Group(func(r chi.Router) {
+			// The BFF session (cookie, CSRF, refresh) becomes the bearer that
+			// Auth validates, as before.
+			if mw.BFF != nil && mw.BFF.Session != nil {
+				r.Use(mw.BFF.Session.Handler)
+			}
 			r.Use(mw.Auth)
 			r.Use(mw.GeneralLimiter.Handler)
 

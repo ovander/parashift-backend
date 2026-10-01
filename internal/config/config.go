@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds all application configuration from environment variables.
@@ -23,6 +24,7 @@ type Config struct {
 	MaxRequestBodyBytes int64
 	MetricsEnabled      bool
 	Socrate             SocrateConfig
+	BFF                 BFFConfig
 	DBPool              DBPoolConfig
 	JWKS                JWKSConfig
 	AI                  AIConfig
@@ -55,6 +57,30 @@ type SocrateConfig struct {
 	AppID        string
 	RedirectURL  string
 }
+
+// BFFConfig configures the Backend-for-Frontend: the server-side sign-in flow
+// (/bff/login, /bff/callback), the session cookie and the session store. The
+// browser holds only the opaque session cookie; tokens stay on the server.
+type BFFConfig struct {
+	// RedirectURL is the BFF's OAuth redirect URI, registered at Socrate
+	// exactly: https://parashift.vandermoten.eu/bff/callback in production. Its
+	// origin is the SPA's, where the session cookie lives. Env: BFF_REDIRECT_URL.
+	// Empty outside production disables the /bff routes.
+	RedirectURL string
+	// CookieName is the session cookie's name; with Secure it is sent as
+	// "__Host-" + CookieName. Env: BFF_COOKIE_NAME (default parashift_session).
+	CookieName string
+	// IdleTTL ends a session unused for that long; AbsoluteTTL ends any session
+	// that old. Env: BFF_SESSION_IDLE_TTL (30m), BFF_SESSION_ABSOLUTE_TTL (8h).
+	IdleTTL     time.Duration
+	AbsoluteTTL time.Duration
+	// InsecureCookie drops Secure and the __Host- prefix, for local development
+	// over plain http only. Env: BFF_INSECURE_COOKIE (default false).
+	InsecureCookie bool
+}
+
+// Enabled reports whether the BFF sign-in routes are configured.
+func (b BFFConfig) Enabled() bool { return b.RedirectURL != "" }
 
 // DBPoolConfig holds database connection pool configuration.
 type DBPoolConfig struct {
@@ -95,6 +121,13 @@ func Load() *Config {
 			ClientSecret: getEnv("SOCRATE_CLIENT_SECRET", ""),
 			AppID:        getEnv("SOCRATE_APP_ID", ""),
 			RedirectURL:  getEnv("SOCRATE_REDIRECT_URL", ""),
+		},
+		BFF: BFFConfig{
+			RedirectURL:    getEnv("BFF_REDIRECT_URL", ""),
+			CookieName:     getEnv("BFF_COOKIE_NAME", "parashift_session"),
+			IdleTTL:        getEnvDuration("BFF_SESSION_IDLE_TTL", 30*time.Minute),
+			AbsoluteTTL:    getEnvDuration("BFF_SESSION_ABSOLUTE_TTL", 8*time.Hour),
+			InsecureCookie: getEnvBool("BFF_INSECURE_COOKIE", false),
 		},
 		DBPool: DBPoolConfig{
 			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
@@ -187,6 +220,7 @@ func (c *Config) Validate() error {
 	}
 
 	errs = append(errs, c.validateSocrate()...)
+	errs = append(errs, c.BFF.validate(c.Env == EnvProduction)...)
 
 	// AutoMigrate in production is dangerous: it can silently alter constraints.
 	if c.Env == "production" && c.AutoMigrate {
@@ -272,6 +306,64 @@ func (c *Config) validateSocrate() []string {
 		errs = append(errs, "SOCRATE_APP_ID is required in production")
 	}
 	return errs
+}
+
+// validate reports a BFF setting that is missing or unsafe. In production the
+// redirect URL is required and must be https, and the insecure cookie is
+// refused; elsewhere the insecure cookie needs an http redirect URL, so it is
+// never used on an https origin.
+func (b BFFConfig) validate(prod bool) []string {
+	var errs []string
+	if prod && b.RedirectURL == "" {
+		errs = append(errs, "BFF_REDIRECT_URL is required in production")
+	}
+	var scheme string
+	if b.RedirectURL != "" {
+		u, err := url.Parse(b.RedirectURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			errs = append(errs, "BFF_REDIRECT_URL must be an absolute http(s) URL")
+		} else {
+			scheme = u.Scheme
+		}
+	}
+	if prod && scheme == "http" {
+		errs = append(errs, "BFF_REDIRECT_URL must use https in production")
+	}
+	if b.InsecureCookie {
+		switch {
+		case prod:
+			errs = append(errs, "BFF_INSECURE_COOKIE must not be enabled in production")
+		case scheme != "http":
+			errs = append(errs, "BFF_INSECURE_COOKIE needs an http:// BFF_REDIRECT_URL (local development only)")
+		}
+	}
+	if !b.Enabled() {
+		return errs
+	}
+	if b.CookieName == "" || strings.ContainsAny(b.CookieName, " \t;,=\"") {
+		errs = append(errs, "BFF_COOKIE_NAME must be a plain cookie name")
+	}
+	if b.IdleTTL <= 0 || b.AbsoluteTTL <= 0 {
+		errs = append(errs, "BFF_SESSION_IDLE_TTL and BFF_SESSION_ABSOLUTE_TTL must be positive durations")
+	} else if b.IdleTTL > b.AbsoluteTTL {
+		errs = append(errs, "BFF_SESSION_IDLE_TTL must not exceed BFF_SESSION_ABSOLUTE_TTL")
+	}
+	return errs
+}
+
+// getEnvDuration retrieves an environment variable as a Go duration ("30m")
+// or returns the fallback. An unparsable value becomes 0, which validate
+// reports, rather than silently falling back.
+func getEnvDuration(key string, fallback time.Duration) time.Duration {
+	v, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(v) == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(strings.TrimSpace(v))
+	if err != nil {
+		return 0
+	}
+	return d
 }
 
 // getEnv retrieves an environment variable or returns a fallback value.

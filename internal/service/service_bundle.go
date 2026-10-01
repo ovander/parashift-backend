@@ -35,7 +35,9 @@ type ServiceBundle struct {
 	// SocrateClient makes every call to Socrate (OAuth and service-account
 	// admin API). nil when SOCRATE_CLIENT_ID / SOCRATE_CLIENT_SECRET are unset.
 	SocrateClient *socrate.Client
-	DB            *gorm.DB
+	// SessionAuth runs the BFF sign-in; nil when SocrateClient is nil.
+	SessionAuth *SessionAuthService
+	DB          *gorm.DB
 }
 
 // NewServiceBundle wires all services with their dependencies.
@@ -152,8 +154,18 @@ func NewServiceBundle(repos *repo.RepoBundle, logger *logrus.Entry, cfgs ...*con
 		StoreException:      storeExceptionSvc,
 		Revocation:          revocationSvc,
 		SocrateClient:       socrateClient,
+		SessionAuth:         newSessionAuth(socrateClient, logger),
 		DB:                  repos.DB,
 	}
+}
+
+// newSessionAuth builds the BFF sign-in service on the Socrate client, or
+// returns nil when the client is not configured.
+func newSessionAuth(sc *socrate.Client, logger *logrus.Entry) *SessionAuthService {
+	if sc == nil {
+		return nil
+	}
+	return NewSessionAuthService(sc, sc, logger.WithField("service", "session_auth"))
 }
 
 // newSocrateClient builds the backendkit Socrate client, or returns nil when

@@ -20,6 +20,8 @@ func prodEnv(t *testing.T) {
 		"SOCRATE_CLIENT_ID":     "client",
 		"SOCRATE_CLIENT_SECRET": "secret",
 		"SOCRATE_APP_ID":        "7",
+		"BFF_REDIRECT_URL":      "https://parashift.example/bff/callback",
+		"BFF_INSECURE_COOKIE":   "",
 		"SOCRATE_ISSUER":        "",
 		"BIND_ADDR":             "",
 	} {

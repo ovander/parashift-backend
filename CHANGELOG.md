@@ -43,6 +43,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Backend-for-Frontend sign-in, additive: `/bff/login`, `/bff/callback`, `/bff/session` and
+  `/bff/logout` run the authorization-code flow with PKCE on the server and keep the tokens in
+  an in-memory session; the browser gets an HttpOnly `__Host-parashift_session` cookie and a
+  CSRF token. `/api/v1` takes the session (CSRF on unsafe methods, one refresh per session) or,
+  during the transition, a bearer. New settings `BFF_REDIRECT_URL` (required in production),
+  `BFF_COOKIE_NAME`, `BFF_SESSION_IDLE_TTL`, `BFF_SESSION_ABSOLUTE_TTL`,
+  `BFF_INSECURE_COOKIE`. The invite claim checks the session's verified e-mail (report S9).
+
 - Repository kit for the public release: README rewritten (badges, an environment table checked
   against the code, accurate architecture, API, security and deployment sections), AGPL-3.0
   licence, `CONTRIBUTING.md`, `SECURITY.md`, `CODEOWNERS`, pull-request and issue templates,
