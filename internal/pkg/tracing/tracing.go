@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -31,6 +31,19 @@ type Config struct {
 	ServiceName    string
 	ServiceVersion string
 	Environment    string
+}
+
+// newResource describes this service. It merges the SDK's default resource
+// with Parashift's attributes; both must use the same semantic-conventions
+// schema, or the merge fails. The import above follows the SDK's (semconv
+// v1.43.0 for go.opentelemetry.io/otel/sdk v1.46.0): bump them together.
+func newResource(cfg Config) (*resource.Resource, error) {
+	return resource.Merge(resource.Default(), resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceName(cfg.ServiceName),
+		semconv.ServiceVersion(cfg.ServiceVersion),
+		semconv.DeploymentEnvironmentNameKey.String(cfg.Environment),
+	))
 }
 
 // scopeName identifies this instrumentation in emitted spans.
@@ -55,14 +68,9 @@ func Init(ctx context.Context, cfg Config) (func(context.Context) error, error) 
 		return noop, err
 	}
 
-	res, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceName(cfg.ServiceName),
-		semconv.ServiceVersion(cfg.ServiceVersion),
-		semconv.DeploymentEnvironment(cfg.Environment),
-	))
+	res, err := newResource(cfg)
 	if err != nil {
-		res = resource.Default()
+		return noop, err
 	}
 
 	ratio := cfg.SampleRatio
