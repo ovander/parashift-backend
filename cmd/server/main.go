@@ -88,6 +88,9 @@ func main() {
 	if err := res.Server.Shutdown(ctx); err != nil {
 		logger.WithError(err).Error("HTTP server shutdown failed")
 	}
+	if res.StopBFF != nil {
+		res.StopBFF()
+	}
 	res.Services.Emitter.Close()
 	res.Limiter.Stop()
 	// Flush any pending trace spans to the collector (no-op when tracing is off).

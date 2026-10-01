@@ -104,7 +104,7 @@ API ── OAuth (token, refresh, revoke, profile, JWKS) → https://socrate.van
 ```
 
 Every request runs through: CORS → request ID → client attribution → logger → tracing → security
-headers → body limit → recover → locale; then, under `/api/v1`, authentication (`jwtauth` and the
+headers → body limit → recover → locale; then, under `/api/v1`, the BFF session, authentication (`jwtauth` and the
 Parashift app role), the general rate limit, the tenant middleware (resolves the employee, their
 store and position) and RBAC per route.
 
@@ -122,8 +122,13 @@ store and position) and RBAC per route.
 - **Fail-open rule engine.** An infrastructure error during rule evaluation logs a warning and
   lets the assignment through, so a database hiccup does not stop a store from planning.
 
-Sign-in is moving to a Backend-for-Frontend under `/bff`, so that no token reaches the browser;
-the plan and the finding it fixes are in [`docs/SOCRATE-COMPAT-REPORT.md`](docs/SOCRATE-COMPAT-REPORT.md).
+**Backend-for-Frontend.** `/bff/*` runs the sign-in on the server (authorization code with PKCE,
+a single-use state and a login-binding cookie) and keeps the tokens in an in-memory session
+(`backendkit/bff`): the browser gets an HttpOnly `__Host-parashift_session` cookie and a CSRF
+token. In front of `/api/v1`, `middleware.SessionAuth` turns the session into the bearer
+`jwtauth` checks, refreshes it once per session, and passes the verified e-mail on. Sessions
+live in memory: a restart signs everyone out. Until the SPA moves to it, a bearer without a
+session is still accepted; see [`docs/SOCRATE-COMPAT-REPORT.md`](docs/SOCRATE-COMPAT-REPORT.md).
 
 ---
 
@@ -197,7 +202,11 @@ Production (`ENV=production`) refuses to start when a required value is missing 
 | `SOCRATE_APP_ID` | Parashift's numeric app ID at Socrate. Required in production | `7` |
 | `SOCRATE_CLIENT_ID` | OAuth client ID | — (required) |
 | `SOCRATE_CLIENT_SECRET` | OAuth client secret; on the server only | — (required) |
-| `SOCRATE_REDIRECT_URL` | Redirect URI used when the SPA sends none | `https://parashift.vandermoten.eu/callback` |
+| `SOCRATE_REDIRECT_URL` | Redirect URI used by the old `/auth/callback` when the SPA sends none | `https://parashift.vandermoten.eu/callback` |
+| `BFF_REDIRECT_URL` | The Backend-for-Frontend's redirect URI, registered exactly at Socrate; on the SPA's origin. Required (https) in production; empty elsewhere turns `/bff` off | `https://parashift.vandermoten.eu/bff/callback` |
+| `BFF_COOKIE_NAME` | Session cookie name, sent as `__Host-<name>` (HttpOnly, Secure, SameSite=Strict, Path=/) | `parashift_session` |
+| `BFF_SESSION_IDLE_TTL`, `BFF_SESSION_ABSOLUTE_TTL` | A session unused this long, or this old, ends (Go durations) | `30m`, `8h` |
+| `BFF_INSECURE_COOKIE` | Drop `Secure` and `__Host-` for local development over http only; refused in production and with an https redirect URL | `false` |
 | `ANTHROPIC_API_KEY` | Enables the AI engine (heuristic fallback without it) | — |
 | `AI_MODEL`, `AI_MAX_TOKENS`, `AI_TIMEOUT_SEC` | AI settings | `claude-sonnet-4-6`, `2000`, `30` |
 | `METRICS_ENABLED` | Serve Prometheus `/metrics` (restrict it at the network layer) | `false` |
@@ -211,9 +220,17 @@ its empty secret would erase the real one. Compare names with this table.
 
 ## API overview
 
-Public: `GET /healthz`, `GET /readyz`, `GET /api/version`, and the sign-in routes
-`POST /auth/callback`, `/auth/refresh`, `/auth/logout` (rate-limited per IP). Everything under
-`/api/v1` needs a Socrate access token (`Authorization: Bearer …`).
+Public: `GET /healthz`, `GET /readyz`, `GET /api/version`, and the sign-in routes, rate-limited
+per IP:
+
+- **Backend-for-Frontend** (`Cache-Control: no-store`): `GET /bff/login?return_to=` (redirects to
+  Socrate with PKCE), `GET /bff/callback`, `GET /bff/session` (`{authenticated, user, csrf}`,
+  never a token), `POST /bff/logout` (needs `X-CSRF-Token`; revokes the refresh token).
+- **Old token routes**, until the SPA has moved to the BFF: `POST /auth/callback`,
+  `/auth/refresh`, `/auth/logout`.
+
+Everything under `/api/v1` needs the BFF session cookie (and `X-CSRF-Token` on POST, PUT, PATCH
+and DELETE) or, during the transition, a Socrate access token (`Authorization: Bearer …`).
 
 | Area | Routes (under `/api/v1`) |
 |---|---|
