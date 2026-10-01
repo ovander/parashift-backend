@@ -52,7 +52,7 @@ type BuildInfo struct {
 // db is passed to the HealthHandler so /readyz can verify the database is reachable.
 func NewHandlerBundle(svc *service.ServiceBundle, cfg *config.Config, db *gorm.DB, build BuildInfo) *HandlerBundle {
 	b := &HandlerBundle{
-		Auth:                NewAuthHandler(cfg.Socrate),
+		Auth:                NewAuthHandler(socrateTokens(svc), cfg.Socrate.RedirectURL),
 		Version:             NewVersionHandler(build.Version, build.Commit, build.BuildTime),
 		Health:              NewHealthHandler(db),
 		Store:               NewStoreHandler(svc.Store),
@@ -87,4 +87,13 @@ func NewHandlerBundle(svc *service.ServiceBundle, cfg *config.Config, db *gorm.D
 		b.AI = NewAIHandler(svc.AI)
 	}
 	return b
+}
+
+// socrateTokens returns the bundle's Socrate client as SocrateTokens, or a nil
+// interface (not a typed nil) when it is not configured.
+func socrateTokens(svc *service.ServiceBundle) SocrateTokens {
+	if svc == nil || svc.SocrateClient == nil {
+		return nil
+	}
+	return svc.SocrateClient
 }

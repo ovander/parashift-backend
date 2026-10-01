@@ -1,73 +1,56 @@
 package middleware
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/ovander/backendkit/apierror"
 	"github.com/ovander/backendkit/ctxutil"
+	"github.com/ovander/backendkit/socrate"
 	"github.com/ovander/parashift/internal/repo"
 	"github.com/sirupsen/logrus"
 )
 
+// ProfileReader reads the signed-in user's Socrate profile with the bearer
+// token jwtauth put in the request context. Satisfied by *socrate.Client
+// (GET /api/profile), which returns the e-mail address and whether Socrate
+// has verified it.
+type ProfileReader interface {
+	GetProfile(ctx context.Context) (*socrate.FullProfile, error)
+}
+
 // TenantMiddleware resolves the authenticated employee from the JWT sub claim.
 type TenantMiddleware struct {
-	empRepo        repo.EmployeeRepository
-	logger         *logrus.Entry
-	socrateBaseURL string        // e.g. "https://golfperformance.fr" — used for /oauth/userinfo
-	httpClient     *http.Client
+	empRepo  repo.EmployeeRepository
+	logger   *logrus.Entry
+	profiles ProfileReader // nil → no auto-link by e-mail
 }
 
-// NewTenantMiddleware creates a new TenantMiddleware.
-// socrateBaseURL is the public OAuth base URL used to call /oauth/userinfo when
-// the access token doesn't carry an email claim (which is the common case).
-// Pass "" to disable the userinfo lookup (auto-link will be silently skipped).
-func NewTenantMiddleware(empRepo repo.EmployeeRepository, logger *logrus.Entry, socrateBaseURL string) *TenantMiddleware {
-	return &TenantMiddleware{
-		empRepo:        empRepo,
-		logger:         logger,
-		socrateBaseURL: strings.TrimRight(socrateBaseURL, "/"),
-		httpClient:     &http.Client{Timeout: 3 * time.Second},
-	}
+// NewTenantMiddleware creates a new TenantMiddleware. profiles nil disables
+// the auto-link by e-mail (Socrate not configured, tests).
+func NewTenantMiddleware(empRepo repo.EmployeeRepository, logger *logrus.Entry, profiles ProfileReader) *TenantMiddleware {
+	return &TenantMiddleware{empRepo: empRepo, logger: logger, profiles: profiles}
 }
 
-// fetchEmailFromUserinfo calls Socrate's /oauth/userinfo endpoint with the
-// Bearer token already present in the Authorization header of r.
-// Returns "" on any error (auto-link is best-effort).
-func (m *TenantMiddleware) fetchEmailFromUserinfo(r *http.Request) string {
-	if m.socrateBaseURL == "" {
+// verifiedEmail returns the signed-in user's e-mail address when Socrate has
+// verified it, and "" otherwise or on any error (auto-link is best-effort).
+// An unverified address is never used: anyone can register an address at
+// Socrate, and linking on it would hand them the employee with that address
+// (compat report row S8).
+func (m *TenantMiddleware) verifiedEmail(ctx context.Context, sub string) string {
+	if m.profiles == nil {
 		return ""
 	}
-	bearer := r.Header.Get("Authorization")
-	if bearer == "" {
-		return ""
-	}
-
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet,
-		m.socrateBaseURL+"/oauth/userinfo", nil)
+	p, err := m.profiles.GetProfile(ctx)
 	if err != nil {
+		m.logger.WithError(err).WithField("sub", sub).Warn("auto-link: Socrate profile lookup failed")
 		return ""
 	}
-	req.Header.Set("Authorization", bearer)
-
-	resp, err := m.httpClient.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		if resp != nil {
-			resp.Body.Close()
-		}
+	if p == nil || !p.IsVerified {
 		return ""
 	}
-	defer resp.Body.Close()
-
-	var profile struct {
-		Email string `json:"email"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&profile); err != nil {
-		return ""
-	}
-	return profile.Email
+	return strings.TrimSpace(p.Email)
 }
 
 // Handler is the chi-compatible middleware function.
@@ -97,15 +80,11 @@ func (m *TenantMiddleware) Handler(next http.Handler) http.Handler {
 		}
 
 		if emp == nil {
-			// Auto-link: if no employee is bound to this auth_id yet, look up the email
-			// from Socrate's /oauth/userinfo endpoint (access tokens don't carry email in
-			// their JWT claims — only ID tokens do). On a match we bind the two records
-			// together so every subsequent request goes through the fast GetByAuthID path.
-			email := ctxutil.GetUserEmail(ctx) // populated only when an ID token is used
-			if email == "" {
-				email = m.fetchEmailFromUserinfo(r)
-			}
-			if email != "" {
+			// Auto-link: if no employee is bound to this auth_id yet, read the user's
+			// e-mail from their Socrate profile (access tokens carry none) and, when
+			// Socrate has verified it, bind the unlinked employee with that address,
+			// so every subsequent request goes through the fast GetByAuthID path.
+			if email := m.verifiedEmail(ctx, sub); email != "" {
 				emp, err = m.empRepo.GetByEmail(ctx, email)
 				if err != nil {
 					m.logger.WithError(err).WithFields(logrus.Fields{"sub": sub, "email": email}).

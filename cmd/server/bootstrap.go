@@ -3,24 +3,21 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
+	sentry "github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/golang-migrate/migrate/v4"
 	migratepostgres "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	sentry "github.com/getsentry/sentry-go"
-	sentryhttp "github.com/getsentry/sentry-go/http"
-	glogger "gorm.io/gorm/logger"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	glogger "gorm.io/gorm/logger"
 
 	"github.com/ovander/backendkit/gormlogger"
 	"github.com/ovander/backendkit/httpware"
@@ -89,9 +86,11 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 		entry.WithField("endpoint", cfg.Tracing.Endpoint).Info("OpenTelemetry tracing enabled")
 	}
 
-	// Step 3: Socrate connectivity checks
+	// Step 3: Socrate connectivity check (the one documented hand-written
+	// request to Socrate: a GET of its public JWKS). Every other call goes
+	// through backendkit's socrate.Client.
 	pingSocrate(cfg, entry)
-	pingSocrateAdmin(cfg, entry)
+	logSocrateAdmin(cfg, entry)
 
 	// Step 4: Database connection.
 	// (Auth middleware is built later, after services, so its revocation check can
@@ -123,7 +122,7 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 	}
 
 	// Steps 7-9
-	repos    := repo.NewRepoBundle(db)
+	repos := repo.NewRepoBundle(db)
 	services := service.NewServiceBundle(repos, logger.WithField("component", "service"), cfg)
 	handlers := handler.NewHandlerBundle(services, cfg, db, build)
 
@@ -138,16 +137,20 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 		jwtauth.WithRevocationCheck(services.Revocation.CheckToken))
 
 	// Step 10: Middleware
-	tenantMW := middleware.NewTenantMiddleware(repos.Employee, logger.WithField("component", "tenant"), cfg.Socrate.BaseURL)
-	rbacMW   := middleware.NewRBACMiddleware(logger.WithField("component", "rbac"))
-	limiter  := httpware.NewRateLimiter(100, 200)
+	var profiles middleware.ProfileReader // nil interface when Socrate is not configured
+	if services.SocrateClient != nil {
+		profiles = services.SocrateClient
+	}
+	tenantMW := middleware.NewTenantMiddleware(repos.Employee, logger.WithField("component", "tenant"), profiles)
+	rbacMW := middleware.NewRBACMiddleware(logger.WithField("component", "rbac"))
+	limiter := httpware.NewRateLimiter(100, 200)
 
 	mw := router.Middleware{
 		Auth:           jwtMW.Handler,
 		Tenant:         tenantMW,
 		RBAC:           rbacMW,
 		GeneralLimiter: limiter,
-		Logger:         logger,  // *logrus.Logger for httpware.Logger
+		Logger:         logger, // *logrus.Logger for httpware.Logger
 	}
 
 	// Step 11-12: Router + Server
@@ -321,131 +324,22 @@ func pingSocrate(cfg *config.Config, log *logrus.Entry) {
 	}
 }
 
-// pingSocrateAdmin verifies that the Socrate admin API is reachable and that the
-// configured app ID is valid. It does this by:
-//  1. Exchanging client credentials for a service token (OAuth port).
-//  2. Probing GET /api/apps/{app_id}/users on the admin port with that token.
-//
-// All failures are non-fatal: the server starts regardless, but clear warnings
-// are emitted so misconfiguration is visible immediately in startup logs.
-func pingSocrateAdmin(cfg *config.Config, log *logrus.Entry) {
+// logSocrateAdmin records how service-account calls (invite e-mails, magic
+// links) will reach Socrate. It sends nothing: the admin API is reached only
+// through socrate.Client, and a missing setting is reported here instead of
+// at the first invitation.
+func logSocrateAdmin(cfg *config.Config, log *logrus.Entry) {
 	sc := cfg.Socrate
-	if sc.AdminURL == "" {
-		log.Warn("SOCRATE_ADMIN_URL is not set — service-account calls (invite emails, magic links) will not work")
-		return
-	}
-	if sc.ClientID == "" || sc.ClientSecret == "" {
-		log.Warn("SOCRATE_CLIENT_ID / SOCRATE_CLIENT_SECRET not set — service-account calls will not work")
-		return
-	}
-
-	client := &http.Client{Timeout: 8 * time.Second}
-
-	// ── Step 1: exchange client credentials for a service token ──────────────
-	tokenURL := strings.TrimRight(sc.BaseURL, "/") + "/oauth/token"
-	form := url.Values{
-		"grant_type":    {"client_credentials"},
-		"client_id":     {sc.ClientID},
-		"client_secret": {sc.ClientSecret},
-	}
-	resp, err := client.Post(tokenURL, "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
-	if err != nil {
-		log.WithError(err).Warnf("Socrate admin probe: token exchange failed (POST %s) — invite emails will not work", tokenURL)
-		return
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		log.Warnf("Socrate admin probe: token exchange returned HTTP %d — check SOCRATE_CLIENT_ID / SOCRATE_CLIENT_SECRET", resp.StatusCode)
-		return
-	}
-
-	var tok struct {
-		AccessToken string `json:"access_token"`
-	}
-	if err := json.Unmarshal(body, &tok); err != nil || tok.AccessToken == "" {
-		log.Warn("Socrate admin probe: token exchange succeeded but response contained no access_token")
-		return
-	}
-	log.Info("Socrate admin probe: service token obtained successfully")
-
-	// ── Step 2: decode the JWT sub claim to get the authoritative app ID ─────
-	// The sub claim ("app:<numeric_id>") is the ground truth — no manual config
-	// needed. If SOCRATE_APP_ID is also set we cross-check and warn on mismatch.
-	resolvedAppID := sc.AppID
-	if parts := strings.Split(tok.AccessToken, "."); len(parts) == 3 {
-		padded := parts[1]
-		switch len(padded) % 4 {
-		case 2:
-			padded += "=="
-		case 3:
-			padded += "="
-		}
-		if payload, decErr := base64.URLEncoding.DecodeString(padded); decErr == nil {
-			var claims struct {
-				Sub string `json:"sub"`
-			}
-			if jsonErr := json.Unmarshal(payload, &claims); jsonErr == nil && claims.Sub != "" {
-				tokenAppID := strings.TrimPrefix(claims.Sub, "app:")
-				switch {
-				case sc.AppID == "":
-					resolvedAppID = tokenAppID
-					log.WithField("app_id", resolvedAppID).Info("Socrate admin probe: app ID auto-resolved from service token sub claim")
-				case tokenAppID == sc.AppID:
-					log.Infof("Socrate admin probe: service token sub=%s matches SOCRATE_APP_ID=%s ✓", claims.Sub, sc.AppID)
-				default:
-					log.Warnf("Socrate admin probe: MISMATCH — service token sub=%s but SOCRATE_APP_ID=%s. "+
-						"Remove SOCRATE_APP_ID from .env (it is now auto-resolved) or update it to %s.",
-						claims.Sub, sc.AppID, tokenAppID)
-					resolvedAppID = tokenAppID // trust the token over the config
-				}
-			}
-		}
-	}
-
-	if resolvedAppID == "" {
-		log.Warn("Socrate admin probe: could not determine app ID — skipping admin API connectivity check")
-		return
-	}
-
-	// ── Step 3: check admin URL reachability with a read-only probe ──────────
-	// Use GET /api/apps/{id}/service/users (list users) instead of POST so that
-	// the probe never creates side-effects. A 200/206 means the route exists and
-	// the app ID is accepted. A 401/403 means an auth or IP-allowlist issue.
-	// A plain-text 404 means the route path does not exist in this Socrate version.
-	probeURL := strings.TrimRight(sc.AdminURL, "/") + "/api/apps/" + resolvedAppID + "/service/users?per_page=1"
-	req, _ := http.NewRequest(http.MethodGet, probeURL, nil)
-	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
-
-	resp2, err := client.Do(req)
-	if err != nil {
-		log.WithError(err).Warnf("Socrate admin probe: could not reach admin API at %s — invite emails will not work", sc.AdminURL)
-		return
-	}
-	defer resp2.Body.Close()
-	body2, _ := io.ReadAll(resp2.Body)
-	bodyStr := strings.TrimSpace(string(body2))
-	isJSON := strings.HasPrefix(bodyStr, "{") || strings.HasPrefix(bodyStr, "[")
-
 	switch {
-	case resp2.StatusCode == http.StatusOK || resp2.StatusCode == http.StatusPartialContent:
-		log.Infof("Socrate admin API reachable and app ID %s accepted ✓", resolvedAppID)
-	case resp2.StatusCode == http.StatusMethodNotAllowed:
-		// 405 means the route exists and auth passed — Socrate just doesn't support GET
-		// listing on the service/users endpoint (POST-only). Invite emails will work fine.
-		log.Infof("Socrate admin API reachable and app ID %s accepted ✓ (probe got 405 — POST-only endpoint, expected)", resolvedAppID)
-	case resp2.StatusCode == http.StatusNotFound && !isJSON:
-		log.Warnf("Socrate admin probe: plain-text 404 from %s — GET /api/apps/{id}/service/users may not exist in this Socrate version. "+
-			"Invite emails will likely fail at runtime.", probeURL)
-	case resp2.StatusCode == http.StatusNotFound && isJSON:
-		log.Warnf("Socrate admin probe: JSON 404 from %s (%s) — app ID %s may not exist in Socrate. "+
-			"Verify SOCRATE_APP_ID matches the numeric database ID.", probeURL, bodyStr, resolvedAppID)
-	case resp2.StatusCode == http.StatusUnauthorized || resp2.StatusCode == http.StatusForbidden:
-		log.Warnf("Socrate admin probe: HTTP %d from %s (%s) — check IP allowlist and service token validity.",
-			resp2.StatusCode, probeURL, bodyStr)
+	case sc.ClientID == "" || sc.ClientSecret == "":
+		log.Warn("SOCRATE_CLIENT_ID / SOCRATE_CLIENT_SECRET not set — service-account calls will not work")
+	case sc.AdminURL == "":
+		log.Warn("SOCRATE_ADMIN_URL is not set — service-account calls (invite emails, magic links) will not work")
+	case sc.AppID == "":
+		log.Warn("SOCRATE_APP_ID is not set — service-account calls (invite emails, magic links) will not work")
 	default:
-		log.Warnf("Socrate admin probe: unexpected HTTP %d from %s — %s", resp2.StatusCode, probeURL, bodyStr)
+		log.WithFields(logrus.Fields{"admin_url": sc.AdminURL, "app_id": sc.AppID}).
+			Info("Socrate service-account calls configured")
 	}
 }
 

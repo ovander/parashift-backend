@@ -193,7 +193,7 @@ func newTestServer(t *testing.T, mocks *testMocks) *httptest.Server {
 	handlers := handler.NewHandlerBundle(svcBundle, cfg, nil, handler.BuildInfo{Version: "test", Commit: "test", BuildTime: "test"})
 
 	rbacMW := middleware.NewRBACMiddleware(logger.WithField("mw", "rbac"))
-	tenantMW := middleware.NewTenantMiddleware(mocks.emp, logger.WithField("mw", "tenant"), "" /* no userinfo in tests */)
+	tenantMW := middleware.NewTenantMiddleware(mocks.emp, logger.WithField("mw", "tenant"), nil /* no auto-link in tests */)
 	limiter := httpware.NewRateLimiter(10000, 20000)
 
 	mw := router.Middleware{

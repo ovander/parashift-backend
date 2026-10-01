@@ -1,18 +1,23 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
-	"net/url"
-	"strings"
-	"time"
 
-	"github.com/ovander/parashift/internal/config"
+	"github.com/ovander/backendkit/socrate"
 	"github.com/ovander/parashift/internal/pkg"
 	"github.com/sirupsen/logrus"
 )
+
+// SocrateTokens is the part of *socrate.Client the /auth routes use: the
+// authorization-code exchange, refresh and revocation, each sent to Socrate's
+// public OAuth endpoints with the client secret.
+type SocrateTokens interface {
+	ExchangeCode(ctx context.Context, code, redirectURI, codeVerifier string) (*socrate.TokenSet, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*socrate.TokenSet, error)
+	RevokeToken(ctx context.Context, token string) error
+}
 
 // AuthHandler handles OAuth2 token exchange with Socrate.
 // It follows the same pattern as Ascenda/KerPlan:
@@ -23,16 +28,14 @@ import (
 // User enrichment (ParaShift role, store_id) is the responsibility of GET /me,
 // which is called by the frontend immediately after the callback.
 type AuthHandler struct {
-	cfg    config.SocrateConfig
-	client *http.Client
+	tokens      SocrateTokens // nil when Socrate is not configured
+	redirectURL string        // SOCRATE_REDIRECT_URL, used when the request names none
 }
 
-// NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler(cfg config.SocrateConfig) *AuthHandler {
-	return &AuthHandler{
-		cfg:    cfg,
-		client: &http.Client{Timeout: 10 * time.Second},
-	}
+// NewAuthHandler creates a new AuthHandler. tokens nil (Socrate not
+// configured) makes every route answer 503.
+func NewAuthHandler(tokens SocrateTokens, redirectURL string) *AuthHandler {
+	return &AuthHandler{tokens: tokens, redirectURL: redirectURL}
 }
 
 // ── Request / response types ──────────────────────────────────────────────────
@@ -51,18 +54,18 @@ type logoutRequest struct {
 	RefreshToken string `json:"refreshToken"`
 }
 
-// socrateTokenResponse is what Socrate's /oauth/token endpoint returns.
-type socrateTokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
-}
-
 // authTokens is what the frontend expects from /auth/callback and /auth/refresh.
 type authTokens struct {
 	AccessToken  string `json:"accessToken"`
 	RefreshToken string `json:"refreshToken"`
+}
+
+func (h *AuthHandler) unavailable(w http.ResponseWriter) bool {
+	if h.tokens != nil {
+		return false
+	}
+	pkg.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "authentication is not configured"})
+	return true
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -70,6 +73,9 @@ type authTokens struct {
 // Callback exchanges a PKCE authorization code for a Socrate token pair.
 // POST /auth/callback  { code, codeVerifier, redirectUri }
 func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
 	var req callbackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		pkg.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -82,10 +88,10 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	redirectURI := req.RedirectURI
 	if redirectURI == "" {
-		redirectURI = h.cfg.RedirectURL
+		redirectURI = h.redirectURL
 	}
 
-	tokens, err := h.exchangeCode(req.Code, req.CodeVerifier, redirectURI)
+	tokens, err := h.tokens.ExchangeCode(r.Context(), req.Code, redirectURI, req.CodeVerifier)
 	if err != nil {
 		// Log upstream detail server-side; return a generic message (SEC-8).
 		logrus.WithError(err).Warn("auth: token exchange failed")
@@ -102,13 +108,16 @@ func (h *AuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 // Refresh rotates a Socrate refresh token into a new token pair.
 // POST /auth/refresh  { refreshToken }
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
 	var req refreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
 		pkg.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "refreshToken is required"})
 		return
 	}
 
-	tokens, err := h.refreshToken(req.RefreshToken)
+	tokens, err := h.tokens.RefreshToken(r.Context(), req.RefreshToken)
 	if err != nil {
 		// Log upstream detail server-side; return a generic message (SEC-8).
 		logrus.WithError(err).Warn("auth: token refresh failed")
@@ -133,62 +142,10 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		pkg.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
-	_ = h.revokeToken(req.RefreshToken)
+	if h.tokens != nil && req.RefreshToken != "" {
+		if err := h.tokens.RevokeToken(r.Context(), req.RefreshToken); err != nil {
+			logrus.WithError(err).Warn("auth: refresh-token revocation failed")
+		}
+	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// ── Socrate helpers ───────────────────────────────────────────────────────────
-
-func (h *AuthHandler) exchangeCode(code, codeVerifier, redirectURI string) (*socrateTokenResponse, error) {
-	return h.postToken(url.Values{
-		"grant_type":    {"authorization_code"},
-		"code":          {code},
-		"redirect_uri":  {redirectURI},
-		"client_id":     {h.cfg.ClientID},
-		"client_secret": {h.cfg.ClientSecret},
-		"code_verifier": {codeVerifier},
-	})
-}
-
-func (h *AuthHandler) refreshToken(token string) (*socrateTokenResponse, error) {
-	return h.postToken(url.Values{
-		"grant_type":    {"refresh_token"},
-		"refresh_token": {token},
-		"client_id":     {h.cfg.ClientID},
-		"client_secret": {h.cfg.ClientSecret},
-	})
-}
-
-func (h *AuthHandler) revokeToken(token string) error {
-	endpoint := strings.TrimRight(h.cfg.BaseURL, "/") + "/oauth/revoke"
-	resp, err := h.client.PostForm(endpoint, url.Values{
-		"token":         {token},
-		"client_id":     {h.cfg.ClientID},
-		"client_secret": {h.cfg.ClientSecret},
-	})
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	return nil
-}
-
-func (h *AuthHandler) postToken(form url.Values) (*socrateTokenResponse, error) {
-	endpoint := strings.TrimRight(h.cfg.BaseURL, "/") + "/oauth/token"
-	resp, err := h.client.PostForm(endpoint, form)
-	if err != nil {
-		return nil, fmt.Errorf("request to Socrate failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("socrate returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	var tokens socrateTokenResponse
-	if err := json.Unmarshal(body, &tokens); err != nil {
-		return nil, fmt.Errorf("failed to parse Socrate response: %w", err)
-	}
-	return &tokens, nil
 }
