@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `scripts/deploy-backend.sh` health-checks `http://127.0.0.1:$PORT/healthz` (PORT from the
+  env file, default 4000) instead of `localhost:8081/health`, which made every deploy roll back,
+  and reads the deployed version from `/api/version` instead of starting a second server.
+- Dockerfile: Go 1.26.4 (was 1.22, which cannot build the module), version ldflags, port 4000.
+
 ### Changed
 
 - backendkit v1.15.1 (from v1.8.0). Every call to Socrate goes through `socrate.Client`: the

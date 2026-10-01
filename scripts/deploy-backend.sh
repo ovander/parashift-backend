@@ -22,7 +22,14 @@ TMP_MIGRATIONS="$TMP_DIR/migrations"
 
 SERVICE="parashift"
 USER="olivier"
-API_URL="http://localhost:8081/health"
+
+# The API listens on 127.0.0.1:$PORT (PORT from the env file, default 4000,
+# as in internal/config). Use 127.0.0.1, not localhost: localhost may resolve
+# to ::1, which the IPv4 loopback bind refuses.
+API_PORT="$(sudo sed -n 's/^[[:space:]]*PORT=\([0-9][0-9]*\).*/\1/p' "$ENV_FILE" | tail -n 1)"
+API_BASE="http://127.0.0.1:${API_PORT:-4000}"
+HEALTH_URL="$API_BASE/healthz"
+VERSION_URL="$API_BASE/api/version"
 
 VERSION="${1:-unknown}"
 RELEASE_DIR="$RELEASES_DIR/$VERSION"
@@ -124,15 +131,15 @@ fi
 echo "🌐 Checking API..."
 
 for i in {1..10}; do
-    if curl -fs $API_URL > /dev/null; then
+    if curl -fs "$HEALTH_URL" > /dev/null; then
         echo "✔ API healthy"
         break
     fi
     sleep 1
 done
 
-if ! curl -fs $API_URL > /dev/null; then
-    echo "❌ API healthcheck failed"
+if ! curl -fs "$HEALTH_URL" > /dev/null; then
+    echo "❌ API healthcheck failed ($HEALTH_URL)"
     rollback
 fi
 
@@ -141,12 +148,9 @@ fi
 # -----------------------------
 echo "📦 Deployed version:"
 
-sudo -u $USER bash -c "
-set -a
-source $ENV_FILE
-set +a
-$CURRENT_LINK/app version
-" || echo "⚠️ Version check skipped"
+# The binary has no "version" subcommand (it would start a second server);
+# ask the running one instead.
+curl -fs "$VERSION_URL" && echo || echo "⚠️ Version check failed ($VERSION_URL)"
 
 # -----------------------------
 # LOGS
