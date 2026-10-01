@@ -15,6 +15,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Security
 
+- The role comes from the token's `app_roles[SOCRATE_CLIENT_ID]`, never its top-level `role`:
+  a Socrate global admin is no longer a Parashift platform admin unless Socrate makes them an
+  admin of Parashift's app (report S4).
 - The per-IP rate limits on `/auth/*` and `/claim` key on one address resolved by the server
   (`X-Forwarded-For` trusted from a loopback peer only, rightmost entry), so a browser can no
   longer pick its own bucket; the same address is sent to Socrate on the calls made on a
