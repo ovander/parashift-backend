@@ -171,7 +171,7 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 	// premature closes while keeping the DoS surface small.
 	writeTimeout := time.Duration(cfg.AI.TimeoutSec+15) * time.Second
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Port),
+		Addr:         cfg.ListenAddr(),
 		Handler:      httpHandler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: writeTimeout,
