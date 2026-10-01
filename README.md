@@ -233,12 +233,13 @@ cp .env.example .env   # edit values before proceeding
 
 ```dotenv
 # Application
-ENV=development
-PORT=8080
+ENV=development          # required: development | production | test
+PORT=4000
+BIND_ADDR=               # default 127.0.0.1 in production, all interfaces otherwise
 LOG_LEVEL=info
 AUTO_MIGRATE=true
 ALLOWED_ORIGINS=http://localhost:3000
-APP_BASE_URL=http://localhost:8080
+APP_BASE_URL=http://localhost:4000
 
 # Database
 DATABASE_URL=postgres://parashift:parashift@localhost:5432/parashift?sslmode=disable
@@ -246,17 +247,15 @@ DB_MAX_OPEN_CONNS=25
 DB_MAX_IDLE_CONNS=5
 DB_CONN_MAX_LIFETIME=300
 
-# Authentication (Socrate)
-SOCRATE_BASE_URL=https://auth.example.com
-SOCRATE_ADMIN_URL=https://auth-admin.example.com
-SOCRATE_CLIENT_ID=parashift
+# Authentication (Socrate). Production refuses to start without SOCRATE_APP_ID and
+# SOCRATE_ADMIN_URL; SOCRATE_ISSUER defaults to SOCRATE_BASE_URL (no trailing slash).
+SOCRATE_BASE_URL=https://socrate.vandermoten.eu
+SOCRATE_JWKS_URL=https://socrate.vandermoten.eu/.well-known/jwks.json
+SOCRATE_ADMIN_URL=http://127.0.0.1:18082
+SOCRATE_APP_ID=7
+SOCRATE_CLIENT_ID=<client id>
 SOCRATE_CLIENT_SECRET=<secret>
-SOCRATE_APP_ID=parashift
-SOCRATE_REDIRECT_URL=http://localhost:8080/auth/callback
-
-# JWT / JWKS
-JWKS_URL=https://auth.example.com/.well-known/jwks.json
-JWKS_ISSUER=https://auth.example.com
+SOCRATE_REDIRECT_URL=http://localhost:5181/callback
 
 # AI (optional — heuristic fallback is used when unset)
 ANTHROPIC_API_KEY=
