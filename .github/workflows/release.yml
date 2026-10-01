@@ -1,0 +1,65 @@
+name: Release
+
+# Pushing a vX.Y.Z tag publishes a GitHub Release: notes from the matching
+# CHANGELOG.md section, and Linux server binaries stamped with the version.
+# Deploys stay with scripts/push.sh and deploy-backend.sh; this only records
+# the release.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same toolchain as CI (patched standard library).
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.4'
+          cache: true
+
+      # Fails when CHANGELOG.md has no section for this version.
+      - name: Release notes from CHANGELOG.md
+        run: bash scripts/changelog-section.sh "$TAG" > release-notes.md
+
+      - name: Build server binaries
+        run: |
+          commit=$(git rev-parse --short HEAD)
+          build_time=$(TZ=UTC git log -1 --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd)
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            name="parashift-backend_${TAG}_linux_${arch}"
+            mkdir -p "build/$name"
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath \
+              -ldflags "-s -w -X main.version=${TAG} -X main.commit=${commit} -X main.buildTime=${build_time}" \
+              -o "build/$name/parashift" ./cmd/server
+            cp -r migrations "build/$name/"
+            cp LICENSE README.md CHANGELOG.md "build/$name/"
+            tar -C build -czf "dist/$name.tar.gz" "$name"
+          done
+          (cd dist && sha256sum *.tar.gz > SHA256SUMS)
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file release-notes.md
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" --verify-tag --title "$TAG" --notes-file release-notes.md dist/*
+          fi

@@ -4,9 +4,18 @@ set -euo pipefail
 # ==============================
 # CONFIG
 # ==============================
-SSH_USER="olivier"
-SSH_HOST="vandermoten.eu"
-SSH_PORT="2222"
+# The VPS address is not kept in the repository. Set SSH_USER, SSH_HOST and
+# SSH_PORT in the environment or in ~/.config/parashift/deploy.env (another file
+# with PARASHIFT_DEPLOY_ENV), for example:
+#   SSH_USER=deploy
+#   SSH_HOST=vps.example.com
+#   SSH_PORT=22
+DEPLOY_ENV="${PARASHIFT_DEPLOY_ENV:-${HOME}/.config/parashift/deploy.env}"
+# shellcheck source=/dev/null
+[ -f "${DEPLOY_ENV}" ] && . "${DEPLOY_ENV}"
+: "${SSH_USER:?set SSH_USER (environment or ${DEPLOY_ENV})}"
+: "${SSH_HOST:?set SSH_HOST (environment or ${DEPLOY_ENV})}"
+SSH_PORT="${SSH_PORT:-22}"
 REMOTE="${SSH_USER}@${SSH_HOST}"
 
 APP_NAME="parashift"

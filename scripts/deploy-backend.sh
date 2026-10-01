@@ -21,7 +21,10 @@ TMP_BIN="$TMP_DIR/app"
 TMP_MIGRATIONS="$TMP_DIR/migrations"
 
 SERVICE="parashift"
-USER="olivier"
+# The account that owns the releases and runs the migrations: the one that
+# called sudo (PARASHIFT_APP_USER overrides it).
+USER="${PARASHIFT_APP_USER:-${SUDO_USER:-}}"
+[ -n "$USER" ] || { echo "❌ Run with sudo from the deploy account, or set PARASHIFT_APP_USER"; exit 1; }
 
 # The API listens on 127.0.0.1:$PORT (PORT from the env file, default 4000,
 # as in internal/config). Use 127.0.0.1, not localhost: localhost may resolve
