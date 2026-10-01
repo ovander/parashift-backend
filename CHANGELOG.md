@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `docs/SOCRATE-MIGRATION-2026-10-01.md`: the retrospective of the move to the new Socrate (final
+  shape, sequence, lessons, open items, symptom index). The compat report's status table is
+  corrected (S1: the VPS still had the committed secret) and updated (S2, D5).
+
 ### Fixed
 
 - `deploy-backend.sh`: the migrations run as the service's user (the unit's `User=`, root when
