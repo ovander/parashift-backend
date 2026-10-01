@@ -17,6 +17,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Toolchain: Go 1.27.1, pinned by a `toolchain` line in `go.mod` and used by CI, the Dockerfile
+  and the release workflow (CI fails if they drift); golangci-lint v2.14.0 (from v2.5.0), built
+  with that toolchain. CI now also runs `govulncheck` and checks that `go.mod`/`go.sum` are tidy.
+
 - `scripts/push.sh` reads the VPS address (`SSH_USER`, `SSH_HOST`, `SSH_PORT`) from the
   environment or `~/.config/parashift/deploy.env` instead of the repository.
 

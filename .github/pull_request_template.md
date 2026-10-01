@@ -8,7 +8,7 @@
 
 - [ ] Changed Go files are gofmt-formatted; `go build ./...` and `go vet ./...` pass
 - [ ] `go test -race ./...` passes
-- [ ] `golangci-lint run ./...` (v2.5.0) reports no issue
+- [ ] `golangci-lint run ./...` (v2.14.0) reports no issue; `govulncheck ./...` finds no reachable vulnerability
 - [ ] A line is added under `## [Unreleased]` in `CHANGELOG.md`
 
 ## Deploy notes

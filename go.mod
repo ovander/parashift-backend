@@ -1,11 +1,11 @@
 module github.com/ovander/parashift
 
-// Language version stays at 1.25 so the linter (golangci-lint v2.5.0, itself built
-// with go1.25) can target the module. The CVE-patched stdlib comes from the build
-// toolchain — CI and the deploy build run Go 1.26.4 — not from this directive, so a
-// `toolchain go1.26.4` line is deliberately omitted (it would force golangci-lint to
-// target 1.26 and fail to load). See .github/workflows/ci.yml go-version.
+// The language version stays at 1.25 so the module remains buildable by any Go
+// 1.25+ toolchain (as backendkit). Builds use the toolchain below, which carries the
+// patched standard library; CI checks that its Go version matches this line.
 go 1.25.0
+
+toolchain go1.27.1
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2

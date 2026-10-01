@@ -26,10 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The same toolchain as CI (patched standard library).
+      # The same toolchain as CI: the one pinned in go.mod (patched standard library).
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.4'
+          go-version: '1.27.1'
           cache: true
 
       # Fails when CHANGELOG.md has no section for this version.

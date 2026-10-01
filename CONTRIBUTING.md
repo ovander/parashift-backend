@@ -6,7 +6,7 @@ accepted under the project's licence, [AGPL-3.0](LICENSE).
 
 ## Development setup
 
-Requirements: Go 1.25 or later (CI uses 1.26.4), Docker for the local database. The tests need
+Requirements: Go 1.25 or later (the `toolchain` line in `go.mod` downloads 1.27.1, as CI uses), Docker for the local database. The tests need
 neither a database nor a network service.
 
 ```bash
@@ -34,7 +34,7 @@ Run these before opening a pull request; CI runs the same:
 git diff --name-only --diff-filter=AM origin/main...HEAD -- '*.go' | xargs -r gofmt -l   # prints nothing
 go build ./... && go vet ./...
 go test -race ./...
-golangci-lint run ./...  # v2.5.0
+golangci-lint run ./...  # v2.14.0
 ```
 
 - Tests sit next to the code (`*_test.go`); router-level tests are in `internal/e2e`.
