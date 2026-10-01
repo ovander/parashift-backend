@@ -15,6 +15,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Security
 
+- The role comes from the token's `app_roles[SOCRATE_CLIENT_ID]`, never its top-level `role`:
+  a Socrate global admin is no longer a Parashift platform admin unless Socrate makes them an
+  admin of Parashift's app (report S4).
 - Auto-link by e-mail on first sign-in only uses an address Socrate has verified (report S8).
 
 ### Added
