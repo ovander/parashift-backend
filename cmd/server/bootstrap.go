@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	sentry "github.com/getsentry/sentry-go"
@@ -19,6 +20,7 @@ import (
 	"gorm.io/gorm"
 	glogger "gorm.io/gorm/logger"
 
+	"github.com/ovander/backendkit/bff"
 	"github.com/ovander/backendkit/gormlogger"
 	"github.com/ovander/backendkit/httpware"
 	"github.com/ovander/backendkit/jwtauth"
@@ -40,6 +42,7 @@ type AppResources struct {
 	Server         *http.Server
 	Limiter        *httpware.RateLimiter
 	TracerShutdown func(context.Context) error
+	StopBFF        func() // stops the BFF session sweeper
 }
 
 // initSentry configures the Sentry SDK when SENTRY_DSN is set.
@@ -145,6 +148,8 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 	rbacMW := middleware.NewRBACMiddleware(logger.WithField("component", "rbac"))
 	limiter := httpware.NewRateLimiter(100, 200)
 
+	bffRoutes, stopBFF := newBFF(cfg, services, logger.WithField("component", "bff"))
+
 	mw := router.Middleware{
 		// jwtauth validates the token; AppRole then replaces its role with
 		// Parashift's own (app_roles[SOCRATE_CLIENT_ID]), never the top-level claim.
@@ -155,6 +160,7 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 		RBAC:           rbacMW,
 		GeneralLimiter: limiter,
 		Logger:         logger, // *logrus.Logger for httpware.Logger
+		BFF:            bffRoutes,
 	}
 
 	// Step 11-12: Router + Server
@@ -182,7 +188,73 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 		IdleTimeout:  60 * time.Second,
 	}
 
-	return &AppResources{DB: db, Services: services, Server: srv, Limiter: limiter, TracerShutdown: tracerShutdown}, nil
+	return &AppResources{DB: db, Services: services, Server: srv, Limiter: limiter, TracerShutdown: tracerShutdown, StopBFF: stopBFF}, nil
+}
+
+// bffSweepInterval is how often expired BFF sessions and pending sign-ins are
+// dropped from memory.
+const bffSweepInterval = time.Minute
+
+// newBFF builds the Backend-for-Frontend: an in-memory session store (idle and
+// absolute lifetimes from BFF_SESSION_*_TTL), the session cookie, the /bff
+// routes, the session middleware in front of /api/v1, and a ticker that sweeps
+// expired sessions. The store is per process: one instance, and a restart
+// signs everyone out.
+//
+// It returns nil (the API then takes bearer tokens only, as before) when
+// BFF_REDIRECT_URL is unset, which Validate allows outside production only.
+// During the transition to the BFF, /api/v1 still accepts a bearer without a
+// session, so the current SPA keeps working.
+func newBFF(cfg *config.Config, services *service.ServiceBundle, log *logrus.Entry) (*router.BFF, func()) {
+	if !cfg.BFF.Enabled() {
+		log.Info("BFF disabled: BFF_REDIRECT_URL not set; the API takes bearer tokens only")
+		return nil, func() {}
+	}
+	if services.SocrateClient == nil || services.SessionAuth == nil {
+		log.Warn("BFF disabled: the Socrate client is not configured")
+		return nil, func() {}
+	}
+	store := bff.NewMemoryStore(cfg.BFF.IdleTTL, cfg.BFF.AbsoluteTTL)
+	gw := &bff.Gateway{
+		Store: store,
+		Cookie: bff.CookieConfig{
+			Name:   cfg.BFF.CookieName,
+			Secure: !cfg.BFF.InsecureCookie, // Validate allows false only over http outside production
+			MaxAge: int(cfg.BFF.AbsoluteTTL.Seconds()),
+		},
+		Refresher: middleware.EndWithoutRefreshToken(services.SocrateClient),
+	}
+	h := handler.NewBFFHandler(handler.BFFOptions{
+		Gateway:     gw,
+		Auth:        services.SessionAuth,
+		Issuer:      cfg.Socrate.BaseURL,
+		ClientID:    cfg.Socrate.ClientID,
+		RedirectURI: cfg.BFF.RedirectURL,
+		Logger:      log,
+	})
+	stop := make(chan struct{})
+	go func() {
+		t := time.NewTicker(bffSweepInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-t.C:
+				store.Sweep()
+				h.Sweep()
+			case <-stop:
+				return
+			}
+		}
+	}()
+	log.WithFields(logrus.Fields{
+		"cookie":       gw.Cookie.CookieName(),
+		"idle_ttl":     cfg.BFF.IdleTTL.String(),
+		"absolute_ttl": cfg.BFF.AbsoluteTTL.String(),
+		"redirect_uri": cfg.BFF.RedirectURL,
+	}).Info("BFF enabled: /bff routes; /api/v1 takes a session or, during the transition, a bearer")
+	var once sync.Once
+	return &router.BFF{Handler: h, Session: middleware.NewSessionAuth(gw, true, log)},
+		func() { once.Do(func() { close(stop) }) }
 }
 
 // newLogger creates and configures a logger instance.

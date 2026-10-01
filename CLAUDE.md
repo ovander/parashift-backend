@@ -38,8 +38,11 @@ belongs to one.
   apart from one documented start-up reachability check. If backendkit lacks something, propose
   the backendkit change; do not work around it here. Service-account calls use
   `/api/apps/{id}/service/*` only.
-- **Tokens** never reach the browser once the BFF lands (report rows S2, S3); never add a route
-  that returns one.
+- **BFF.** The browser signs in through `/bff` and holds only the HttpOnly session cookie and a
+  CSRF token; tokens stay in the server-side session (`bff.Gateway`). Never add a route that
+  returns a token. `middleware.SessionAuth` turns the session into the bearer in front of
+  `/api/v1`; keep CSRF on unsafe methods and the `__Host-` cookie. The bearer-without-session
+  path exists only until the SPA has moved (report rows S2, S3).
 - **Migrations.** A schema change is a new numbered pair in `migrations/` (`make migrate-create`)
   with a working `down`. Never edit a released migration. `AUTO_MIGRATE` is development-only.
 - **Never weaken a gate** to get green: no skipped or deleted tests, no `//nolint` or `t.Skip`
