@@ -10,7 +10,7 @@ import (
 )
 
 // DebugHandler exposes dev-only diagnostic endpoints.
-// It is only registered when APP_ENV != "production".
+// It is only registered when ENV=development (router.go).
 type DebugHandler struct{}
 
 // NewDebugHandler creates a DebugHandler.
@@ -34,7 +34,7 @@ func (h *DebugHandler) DecodeToken(w http.ResponseWriter, r *http.Request) {
 	if len(parts) != 3 {
 		pkg.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "not a JWT — expected 3 dot-separated parts",
-			"parts": strings.Join([]string{"got", string(rune('0'+len(parts))), "parts"}, " "),
+			"parts": strings.Join([]string{"got", string(rune('0' + len(parts))), "parts"}, " "),
 		})
 		return
 	}

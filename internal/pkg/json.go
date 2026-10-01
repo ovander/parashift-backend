@@ -12,8 +12,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// isDev returns true when APP_ENV is not "production".
-func isDev() bool { return os.Getenv("APP_ENV") != "production" }
+// isDev reports whether development guards apply: everywhere except
+// ENV=production (the variable internal/config reads). It used to read
+// APP_ENV, which nothing sets, so the guard below also ran in production.
+func isDev() bool { return os.Getenv("ENV") != "production" }
 
 // WriteJSON writes a JSON response with the given status code.
 func WriteJSON(w http.ResponseWriter, status int, v any) {
