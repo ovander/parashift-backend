@@ -142,11 +142,16 @@ Ranked most severe first. *Fix* names the PR in the plan (§6) that closes the r
 |---|---|
 | S1 | Placeholders merged (#55). The secret now set on the VPS differs from the committed one; **owner: confirm the old one (`As6N…`) is revoked at Socrate** |
 | S8 | Fixed in PR 2: auto-link reads the profile through `socrate.Client.GetProfile` and links only when Socrate has verified the address |
-| S2–S7, S9, S10 | open |
+| S4 | Fixed in PR 3: the role is `app_roles[SOCRATE_CLIENT_ID]` (`middleware.AppRole`), `user` without one; the audience check stays on |
+| S6, S7 | Fixed in PR 4: production binds `127.0.0.1` (`BIND_ADDR` overrides; an empty value counts as unset); `ENV` is required, and `/api/v1/debug/token` is served only with `ENV=development` |
+| S2, S3, S5, S9, S10 | open |
 | K1, K6 | Fixed in PR 2: backendkit v1.15.1; every Socrate call through `socrate.Client`; the admin probe and the JWT decoding are gone; the JWKS GET is the one documented start-up check |
-| K2–K5, K7 | open |
+| K2–K4 | Fixed in PR 4: `SOCRATE_APP_ID` (positive integer) and `SOCRATE_ADMIN_URL` required in production, never derived; URLs absolute, no trailing slash, https for the base and JWKS URLs; `SOCRATE_ISSUER` defaults to `SOCRATE_BASE_URL` and must equal it in production |
+| K5 | Decided 2026-10-01: magic links dropped; "resend invite" will send a claim link (PR 7) |
+| K7 | open |
+| D6 | Fixed in PR 4 (README env block and `.env.example`) |
 | D1–D3 | Fixed in PR 6: the deploy health check calls `http://127.0.0.1:$PORT/healthz` (PORT from the env file) and reads the version from `/api/version`; Dockerfile on Go 1.26.4, port 4000, `BIND_ADDR=0.0.0.0` in the container |
-| D4, D6, D7 | open |
+| D4, D7 | open |
 | D5 | Fixed in #56 and ovander/parashift-frontend#4, #5 (`govulncheck` still not in CI) |
 | U1, U3 | asked |
 | U2 | Answered: app ID **7**, client ID `5Fev…` (the one that was in `.env.example`) |

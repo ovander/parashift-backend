@@ -70,7 +70,7 @@ func main() {
 		logger.Fatalf("bootstrap: %v", err)
 	}
 
-	logger.Infof("ParaShift starting on :%d", cfg.Port)
+	logger.Infof("ParaShift starting on %s", cfg.ListenAddr())
 	go func() {
 		if err := res.Server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatalf("server: %v", err)

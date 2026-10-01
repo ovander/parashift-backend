@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -9,8 +11,9 @@ import (
 
 // Config holds all application configuration from environment variables.
 type Config struct {
-	Env                 string
+	Env                 string // ENV: development | production | test; required
 	Port                int
+	BindAddr            string // BIND_ADDR: interface to listen on; 127.0.0.1 by default in production
 	LogLevel            string
 	DatabaseURL         string
 	AllowedOrigins      []string
@@ -74,15 +77,15 @@ type SentryConfig struct {
 
 // Load creates a Config from environment variables.
 func Load() *Config {
-	return &Config{
-		Env:                 getEnv("ENV", "development"),
+	c := &Config{
+		Env:                 getEnv("ENV", ""),
 		Port:                getEnvInt("PORT", 4000),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
 		DatabaseURL:         getEnv("DATABASE_URL", ""),
 		AllowedOrigins:      parseCSV(getEnv("ALLOWED_ORIGINS", "http://localhost:3000")),
 		AppBaseURL:          getEnv("APP_BASE_URL", "http://localhost:4000"),
-		AutoMigrate:         getEnvBool("AUTO_MIGRATE", false),    // safe default: GORM schema sync; keep false in production
-		RunMigrations:       getEnvBool("RUN_MIGRATIONS", false),  // safe default: explicit opt-in per deploy
+		AutoMigrate:         getEnvBool("AUTO_MIGRATE", false),                    // safe default: GORM schema sync; keep false in production
+		RunMigrations:       getEnvBool("RUN_MIGRATIONS", false),                  // safe default: explicit opt-in per deploy
 		MaxRequestBodyBytes: int64(getEnvInt("MAX_REQUEST_BODY_BYTES", 10485760)), // 10MB
 		MetricsEnabled:      getEnvBool("METRICS_ENABLED", false),
 		Socrate: SocrateConfig{
@@ -117,7 +120,39 @@ func Load() *Config {
 			SampleRatio: getEnvFloat("OTEL_TRACES_SAMPLER_ARG", 1.0),
 		},
 	}
+	// Production listens on loopback only: Caddy on the same host is the only
+	// client (report row S6). BIND_ADDR overrides it, e.g. 0.0.0.0 in a container.
+	defaultBind := ""
+	if c.Env == EnvProduction {
+		defaultBind = "127.0.0.1"
+	}
+	// An empty BIND_ADDR= line counts as unset, so it cannot open every interface.
+	c.BindAddr = defaultBind
+	if v := strings.TrimSpace(os.Getenv("BIND_ADDR")); v != "" {
+		c.BindAddr = v
+	}
+	// The issuer is Socrate's base URL unless SOCRATE_ISSUER says otherwise;
+	// Validate checks the two agree in production.
+	if strings.TrimSpace(c.JWKS.Issuer) == "" {
+		c.JWKS.Issuer = c.Socrate.BaseURL
+	}
+	return c
 }
+
+// Environment names accepted in ENV.
+const (
+	EnvDevelopment = "development"
+	EnvProduction  = "production"
+	EnvTest        = "test"
+)
+
+// ListenAddr is the address the HTTP server listens on (BIND_ADDR:PORT).
+func (c *Config) ListenAddr() string {
+	return net.JoinHostPort(c.BindAddr, strconv.Itoa(c.Port))
+}
+
+// IsDevelopment reports whether development-only routes may be served.
+func (c *Config) IsDevelopment() bool { return c.Env == EnvDevelopment }
 
 // Validate checks that all required configuration values are set.
 // The server refuses to start if this returns an error.
@@ -129,7 +164,7 @@ func (c *Config) Validate() error {
 		value string
 	}{
 		{"DATABASE_URL", c.DatabaseURL},
-		{"SOCRATE_JWKS_URL / SOCRATE_JWKS_URL", c.JWKS.URL},
+		{"SOCRATE_JWKS_URL", c.JWKS.URL},
 		{"SOCRATE_CLIENT_ID", c.Socrate.ClientID},
 		{"SOCRATE_CLIENT_SECRET", c.Socrate.ClientSecret},
 		{"SOCRATE_BASE_URL", c.Socrate.BaseURL},
@@ -140,10 +175,18 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// Warn loudly when running production without issuer validation.
-	if c.Env == "production" && strings.TrimSpace(c.JWKS.Issuer) == "" {
-		errs = append(errs, "SOCRATE_ISSUER must be set in production (prevents accepting tokens from foreign issuers)")
+	// ENV is explicit: a missing ENV used to mean "development", which on a
+	// server skipped every production check and served /api/v1/debug/token
+	// (report row S7).
+	switch c.Env {
+	case EnvDevelopment, EnvProduction, EnvTest:
+	case "":
+		errs = append(errs, "ENV is required (development, production or test)")
+	default:
+		errs = append(errs, fmt.Sprintf("ENV=%q is not one of development, production, test", c.Env))
 	}
+
+	errs = append(errs, c.validateSocrate()...)
 
 	// AutoMigrate in production is dangerous: it can silently alter constraints.
 	if c.Env == "production" && c.AutoMigrate {
@@ -175,6 +218,60 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid configuration:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 	return nil
+}
+
+// validateSocrate checks the Socrate settings (report rows K2-K4). Outside
+// production only the URL shapes are checked, so a developer can run without
+// the admin API.
+func (c *Config) validateSocrate() []string {
+	var errs []string
+	prod := c.Env == EnvProduction
+	sc := c.Socrate
+
+	checkURL := func(name, v string, required bool) {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			if required {
+				errs = append(errs, name+" is required in production")
+			}
+			return
+		}
+		u, err := url.Parse(v)
+		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+			errs = append(errs, name+" must be an absolute http(s) URL")
+			return
+		}
+		if strings.HasSuffix(v, "/") {
+			errs = append(errs, name+" must not end with a slash")
+		}
+	}
+
+	// The OAuth base URL is also the issuer: no trailing slash, https in production.
+	checkURL("SOCRATE_BASE_URL", sc.BaseURL, false)
+	if prod && !strings.HasPrefix(sc.BaseURL, "https://") {
+		errs = append(errs, "SOCRATE_BASE_URL must use https in production")
+	}
+	if prod && !strings.HasPrefix(c.JWKS.URL, "https://") {
+		errs = append(errs, "SOCRATE_JWKS_URL must use https in production")
+	}
+	if prod && c.JWKS.Issuer != sc.BaseURL {
+		errs = append(errs, "SOCRATE_ISSUER must equal SOCRATE_BASE_URL in production (or be left unset)")
+	}
+
+	// The admin API is never derived from the base URL: backendkit's default
+	// (the public host on port 8081) is wrong behind a TLS proxy. On the apps
+	// VPS it is the SSH tunnel http://127.0.0.1:18082.
+	checkURL("SOCRATE_ADMIN_URL", sc.AdminURL, prod)
+
+	// The app ID cannot be looked up by a service account; Socrate gives it.
+	if id := strings.TrimSpace(sc.AppID); id != "" {
+		if n, err := strconv.Atoi(id); err != nil || n <= 0 {
+			errs = append(errs, "SOCRATE_APP_ID must be a positive integer")
+		}
+	} else if prod {
+		errs = append(errs, "SOCRATE_APP_ID is required in production")
+	}
+	return errs
 }
 
 // getEnv retrieves an environment variable or returns a fallback value.
