@@ -33,6 +33,10 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 	// Global middleware
 	r.Use(middleware.CORS(cfg.AllowedOrigins))
 	r.Use(httpware.RequestID)
+	// Socrate calls made on a user's behalf (code exchange, refresh, revocation)
+	// carry the browser's address, resolved from a loopback-trusted
+	// X-Forwarded-For; never the browser's own header (report row S5).
+	r.Use(middleware.SocrateClientAttribution())
 	r.Use(httpware.Logger(mw.Logger))
 	// Tracing runs after Logger (so it enriches the request logger with trace_id)
 	// and outside Recover (so panics surface as 5xx spans). It is a no-op span when

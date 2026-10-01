@@ -30,6 +30,10 @@ All notable changes to this project are documented here. The format follows
   trailing slash, https where public; `SOCRATE_ISSUER` (now optional) must equal
   `SOCRATE_BASE_URL`. The server listens on `127.0.0.1` in production (`BIND_ADDR`), and
   `/api/v1/debug/token` is served only with `ENV=development` (report K2–K4, S6, S7).
+- The per-IP rate limits on `/auth/*` and `/claim` key on one address resolved by the server
+  (`X-Forwarded-For` trusted from a loopback peer only, rightmost entry), so a browser can no
+  longer pick its own bucket; the same address is sent to Socrate on the calls made on a
+  user's behalf (client attribution, report S5).
 - Auto-link by e-mail on first sign-in only uses an address Socrate has verified (report S8).
 
 ### Added
