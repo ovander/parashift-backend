@@ -15,6 +15,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Security
 
+- The role comes from the token's `app_roles[SOCRATE_CLIENT_ID]`, never its top-level `role`:
+  a Socrate global admin is no longer a Parashift platform admin unless Socrate makes them an
+  admin of Parashift's app (report S4).
 - Production configuration is checked at start-up: `ENV` must be set explicitly;
   `SOCRATE_APP_ID` and `SOCRATE_ADMIN_URL` are required; Socrate URLs are absolute, without a
   trailing slash, https where public; `SOCRATE_ISSUER` (now optional) must equal

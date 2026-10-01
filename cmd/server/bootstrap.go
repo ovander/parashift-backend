@@ -146,7 +146,11 @@ func bootstrap(cfg *config.Config, logger *logrus.Logger, build handler.BuildInf
 	limiter := httpware.NewRateLimiter(100, 200)
 
 	mw := router.Middleware{
-		Auth:           jwtMW.Handler,
+		// jwtauth validates the token; AppRole then replaces its role with
+		// Parashift's own (app_roles[SOCRATE_CLIENT_ID]), never the top-level claim.
+		Auth: func(next http.Handler) http.Handler {
+			return jwtMW.Handler(middleware.AppRole(cfg.Socrate.ClientID)(next))
+		},
 		Tenant:         tenantMW,
 		RBAC:           rbacMW,
 		GeneralLimiter: limiter,
