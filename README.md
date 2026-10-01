@@ -82,14 +82,14 @@ constraints where the decision is made:
 
 | Component | Technology |
 |---|---|
-| Language | Go (`go 1.25` language version; built and tested with Go 1.26.4) |
+| Language | Go (`go 1.25` language version; built and tested with Go 1.27.1, pinned by `toolchain` in `go.mod`) |
 | HTTP | chi v5, `backendkit/httpware` (request ID, logging, security headers, body limit, recover, timeouts, rate limit, RBAC) |
 | Database | PostgreSQL 16, GORM, SQL migrations with golang-migrate (`migrations/`) |
 | Identity | Socrate via `backendkit`: `jwtauth` (RS256, JWKS, issuer, audience, revocation check), `socrate.Client` (OAuth and service-account calls) |
 | AI | `backendkit/aigateway` (Anthropic Claude), heuristic fallback |
 | Observability | logrus, Prometheus (`METRICS_ENABLED`), OpenTelemetry OTLP/HTTP, Sentry |
 | Tests | `testing`, testify, go-sqlmock, mockery mocks |
-| Lint | golangci-lint v2.5.0 (`.golangci.yml`) |
+| Lint | golangci-lint v2.14.0 (`.golangci.yml`) |
 
 ---
 
@@ -159,7 +159,7 @@ docs/                compatibility report; history/ (unmaintained notes from the
 
 ### Prerequisites
 
-- Go 1.25 or later (CI builds with 1.26.4), Docker for the local database, and the
+- Go 1.25 or later (the `toolchain` line in `go.mod` downloads 1.27.1), Docker for the local database, and the
   [`migrate`](https://github.com/golang-migrate/migrate) CLI for manual migrations.
 - A Socrate client for sign-in, to go past the public routes.
 
@@ -291,7 +291,7 @@ The AI never writes to the schedule, and rule enforcement does not depend on it.
 ```bash
 go build ./... && go vet ./...
 go test -race ./...              # unit, handler and router end-to-end tests; no database needed
-golangci-lint run ./...          # v2.5.0
+golangci-lint run ./...          # v2.14.0
 ```
 
 CI (`.github/workflows/ci.yml`) runs lint, build, vet and race tests with coverage, and on pull

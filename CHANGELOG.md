@@ -17,6 +17,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Toolchain: Go 1.27.1, pinned by a `toolchain` line in `go.mod` and used by CI, the Dockerfile
+  and the release workflow (CI fails if they drift); golangci-lint v2.14.0 (from v2.5.0), built
+  with that toolchain. CI now also runs `govulncheck` and checks that `go.mod`/`go.sum` are tidy.
+- GitHub Actions on Node 24: `actions/checkout` v5, `actions/setup-go` v6.
+
 - `scripts/push.sh` reads the VPS address (`SSH_USER`, `SSH_HOST`, `SSH_PORT`) from the
   environment or `~/.config/parashift/deploy.env` instead of the repository.
 
@@ -26,6 +31,13 @@ All notable changes to this project are documented here. The format follows
   probe is replaced by a log line.
 
 ### Security
+
+- Four vulnerabilities reachable from Parashift's code, found by the new `govulncheck` job:
+  pgx 5.11.0 (SQL injection via placeholder confusion, GO-2026-5004), grpc 1.84.0 (HTTP/2 memory
+  exhaustion, GO-2026-6348), OpenTelemetry 1.46.0 (OTLP response memory exhaustion,
+  GO-2026-4985; SDK PATH hijacking, GO-2026-4394). The tracer resource now uses semconv
+  v1.43.0, the SDK's schema: with the old v1.26.0 the merge fails and traces would lose
+  `service.name`.
 
 - The role comes from the token's `app_roles[SOCRATE_CLIENT_ID]`, never its top-level `role`:
   a Socrate global admin is no longer a Parashift platform admin unless Socrate makes them an

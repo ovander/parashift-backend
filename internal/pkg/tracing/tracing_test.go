@@ -72,7 +72,7 @@ func TestMiddleware_RecordsServerSpan(t *testing.T) {
 
 	attrs := map[string]string{}
 	for _, kv := range span.Attributes() {
-		attrs[string(kv.Key)] = kv.Value.Emit()
+		attrs[string(kv.Key)] = kv.Value.String()
 	}
 	assert.Equal(t, "/stores/{storeId}/schedule", attrs["http.route"])
 }

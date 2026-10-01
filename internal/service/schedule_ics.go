@@ -97,9 +97,9 @@ func renderICS(assignments []*model.ShiftAssignment, shiftByID map[uuid.UUID]*mo
 		dtEnd := fmt.Sprintf("%sT%s00", dateStr, endTimeStr)
 
 		b.WriteString("BEGIN:VEVENT\r\n")
-		b.WriteString(fmt.Sprintf("UID:%s@parashift\r\n", assignment.ID))
-		b.WriteString(fmt.Sprintf("DTSTART:%s\r\n", dtStart))
-		b.WriteString(fmt.Sprintf("DTEND:%s\r\n", dtEnd))
+		fmt.Fprintf(&b, "UID:%s@parashift\r\n", assignment.ID)
+		fmt.Fprintf(&b, "DTSTART:%s\r\n", dtStart)
+		fmt.Fprintf(&b, "DTEND:%s\r\n", dtEnd)
 		b.WriteString("SUMMARY:Work Shift\r\n")
 		b.WriteString("END:VEVENT\r\n")
 	}

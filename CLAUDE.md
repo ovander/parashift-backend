@@ -58,12 +58,17 @@ git diff --name-only --diff-filter=AM origin/main...HEAD -- '*.go' | xargs -r go
 go build ./...
 go vet ./...
 go test -race -covermode=atomic -coverprofile=coverage.out ./...
-golangci-lint run ./...        # v2.5.0, built with Go 1.25 (see go.mod)
+golangci-lint run ./...        # v2.14.0, built with Go 1.27.1
+govulncheck ./...              # no reachable vulnerability
 ```
+
+Go 1.27.1 is pinned by the `toolchain` line in `go.mod`; CI, the Dockerfile and the release
+workflow use it, and CI fails if they drift. Install the linter with the same toolchain:
+`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0`.
 
 Run it, **check the exit code of each step**, and push only when all pass; never chain a push
 after a command that may fail. The whole tree is not gofmt-clean yet (57 files on 2026-10-01): new
-and changed files must be. `govulncheck ./...` is not in CI yet (report row D5).
+and changed files must be.
 
 ## Git workflow
 

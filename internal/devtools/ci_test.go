@@ -37,6 +37,8 @@ func TestCIWorkflowPresent(t *testing.T) {
 		"go test -race",
 		"-coverprofile=coverage.out",
 		"gofmt -l",
+		"govulncheck ./...",
+		"Toolchain matches go.mod",
 		"pull_request",
 	} {
 		assert.Contains(t, ci, want, "CI workflow must run %q", want)
