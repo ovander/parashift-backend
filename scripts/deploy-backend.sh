@@ -113,10 +113,13 @@ sudo chmod 644 "$MIGRATIONS_DIR"/*.sql || true
 # -----------------------------
 echo "🗄 Running migrations..."
 
+# From $APP_DIR: the binary opens file://migrations relative to its working
+# directory (cmd/server/bootstrap.go), i.e. $MIGRATIONS_DIR.
 sudo -u "$MIGRATE_USER" bash -c "
 set -a
 source $ENV_FILE
 set +a
+cd $APP_DIR
 $RELEASE_DIR/app migrate
 "
 
