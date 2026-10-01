@@ -15,6 +15,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `scripts/push.sh` reads the VPS address (`SSH_USER`, `SSH_HOST`, `SSH_PORT`) from the
+  environment or `~/.config/parashift/deploy.env` instead of the repository.
+
 - backendkit v1.15.1 (from v1.8.0). Every call to Socrate goes through `socrate.Client`: the
   `/auth` code exchange, refresh and revocation, and the profile read for auto-link. The app ID
   is `SOCRATE_APP_ID` only (no longer decoded from a service token), and the start-up admin
@@ -37,6 +40,12 @@ All notable changes to this project are documented here. The format follows
 - Auto-link by e-mail on first sign-in only uses an address Socrate has verified (report S8).
 
 ### Added
+
+- Repository kit for the public release: README rewritten (badges, an environment table checked
+  against the code, accurate architecture, API, security and deployment sections), AGPL-3.0
+  licence, `CONTRIBUTING.md`, `SECURITY.md`, `CODEOWNERS`, pull-request and issue templates,
+  and a release workflow that publishes Linux binaries and the changelog section for a
+  `vX.Y.Z` tag. The notes from the first build moved to `docs/history/`.
 
 - `CLAUDE.md` (sources of truth, hard rules, local gate, git workflow) and this changelog.
 - CI fails a pull request that adds or changes a Go file that is not gofmt-formatted.

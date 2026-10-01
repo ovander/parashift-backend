@@ -75,8 +75,10 @@ and changed files must be. `govulncheck ./...` is not in CI yet (report row D5).
 
 - A release is an annotated tag `vX.Y.Z` on an updated `main`, with the `[Unreleased]` section
   moved under the new version. Tag only the merged release commit:
-  `grep -q "^## \[X.Y.Z\]" CHANGELOG.md && git tag -a vX.Y.Z -m vX.Y.Z`.
-- `scripts/push.sh <tag>` builds and uploads the binary and migrations to the apps VPS; then
+  `grep -q "^## \[X.Y.Z\]" CHANGELOG.md && git tag -a vX.Y.Z -m vX.Y.Z`. Pushing the tag runs
+  `.github/workflows/release.yml` (Linux binaries; fails when the changelog section is missing).
+- `scripts/push.sh <tag>` builds and uploads the binary and migrations to the apps VPS (SSH
+  settings in `~/.config/parashift/deploy.env`, never in the repository); then
   `sudo /opt/apps/parashift/deploy-backend.sh <tag>` on the VPS migrates, switches and restarts.
   Back up the database before a release with a migration. Deploy the backend before the frontend
   when the API changes.

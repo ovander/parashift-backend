@@ -1,0 +1,48 @@
+name: Bug report
+description: Something in Parashift does not work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. For a security vulnerability, do **not** open an issue: use the
+        Security tab → Report a vulnerability.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: The app and API versions (shown in the app; the API answers them at /api/version).
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Your role in Parashift
+      options: [Employee, Manager, Platform admin]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the planner, week …
+        2. Drag the shift … onto …
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      placeholder: Chrome on Windows, Safari on iPhone…
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots, console errors, request IDs
+      description: The X-Request-Id of a failing API call (developer tools → Network) helps find it in the server logs. Remove any personal data (names, schedules).
