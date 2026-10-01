@@ -13,6 +13,8 @@ All notable changes to this project are documented here. The format follows
   that before stopping the service; and a failure at any step after the stop, migrations
   included, switches back to the previous release and restarts the service (it used to leave the
   API stopped).
+- `deploy-backend.sh` runs the migrations from `/opt/apps/parashift`: the binary opens
+  `file://migrations` relative to its working directory, which was the caller's.
 
 ## [3.0.0] - 2026-10-01
 
