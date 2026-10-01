@@ -6,7 +6,7 @@ accepted under the project's licence, [AGPL-3.0](LICENSE).
 
 ## Development setup
 
-Requirements: Go 1.25 or later (the `toolchain` line in `go.mod` downloads 1.27.1, as CI uses), Docker for the local database. The tests need
+Requirements: Go 1.26 or later (the `toolchain` line in `go.mod` downloads 1.27.1, as CI uses), Docker for the local database. The tests need
 neither a database nor a network service.
 
 ```bash
