@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-01
+
+Sign-in moves to Socrate through a Backend-for-Frontend. **Upgrading from v2.x** needs `.env`
+changes before the release starts (the server refuses to start otherwise): `ENV=production`
+replaces `APP_ENV`; `SOCRATE_APP_ID`, `SOCRATE_ADMIN_URL` and `BFF_REDIRECT_URL` are required;
+the server listens on `127.0.0.1:$PORT`, so Caddy must proxy to `127.0.0.1`, not `localhost`;
+Caddy sends `/api/*`, `/bff/*` and `/auth/*` on the app's own host to the API. Migrations
+000033 to 000036 run on deploy. Deploy before web app v3.0.0.
+
 ### Fixed
 
 - An API error without an i18n key no longer panics (and answers 500) in production: the
