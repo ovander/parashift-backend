@@ -17,6 +17,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Go modules updated to their latest versions: gorm 1.31.2 (from 1.25.12) with
+  driver/postgres 1.6.3 and datatypes 1.2.7, chi 5.3.2, sentry-go 0.49.0, golang-migrate
+  4.20.1, logrus 1.10.2, lib/pq 1.12.3 and the rest of `go.sum`. golang.org/x/time now needs
+  Go 1.26, so `go.mod`'s language version is 1.26 (the toolchain stays 1.27.1).
+
 - Toolchain: Go 1.27.1, pinned by a `toolchain` line in `go.mod` and used by CI, the Dockerfile
   and the release workflow (CI fails if they drift); golangci-lint v2.14.0 (from v2.5.0), built
   with that toolchain. CI now also runs `govulncheck` and checks that `go.mod`/`go.sum` are tidy.
