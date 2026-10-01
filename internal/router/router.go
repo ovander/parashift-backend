@@ -78,8 +78,9 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 	// All versioned API routes live under /api/v1 to match frontend axios calls.
 	r.Route("/api/v1", func(r chi.Router) {
 
-		// Dev-only: decode a JWT without validation to inspect alg/kid/claims
-		if cfg.Env != "production" {
+		// Dev-only: decode a JWT without validation to inspect alg/kid/claims.
+		// Served only with ENV=development, never by default (report row S7).
+		if cfg.IsDevelopment() {
 			r.Get("/debug/token", handlers.Debug.DecodeToken)
 		}
 

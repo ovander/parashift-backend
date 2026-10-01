@@ -18,6 +18,11 @@ All notable changes to this project are documented here. The format follows
 - The role comes from the token's `app_roles[SOCRATE_CLIENT_ID]`, never its top-level `role`:
   a Socrate global admin is no longer a Parashift platform admin unless Socrate makes them an
   admin of Parashift's app (report S4).
+- Production configuration is checked at start-up: `ENV` must be set explicitly;
+  `SOCRATE_APP_ID` and `SOCRATE_ADMIN_URL` are required; Socrate URLs are absolute, without a
+  trailing slash, https where public; `SOCRATE_ISSUER` (now optional) must equal
+  `SOCRATE_BASE_URL`. The server listens on `127.0.0.1` in production (`BIND_ADDR`), and
+  `/api/v1/debug/token` is served only with `ENV=development` (report K2–K4, S6, S7).
 - The per-IP rate limits on `/auth/*` and `/claim` key on one address resolved by the server
   (`X-Forwarded-For` trusted from a loopback peer only, rightmost entry), so a browser can no
   longer pick its own bucket; the same address is sent to Socrate on the calls made on a
