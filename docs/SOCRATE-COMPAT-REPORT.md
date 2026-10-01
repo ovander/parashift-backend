@@ -151,7 +151,8 @@ Ranked most severe first. *Fix* names the PR in the plan (§6) that closes the r
 | K5 | Decided 2026-10-01: magic links dropped; "resend invite" will send a claim link (PR 7) |
 | K7 | open |
 | D6 | Fixed in PR 4 (README env block and `.env.example`) |
-| D1–D4, D7 | open |
+| D1–D3 | Fixed in PR 6: the deploy health check calls `http://127.0.0.1:$PORT/healthz` (PORT from the env file) and reads the version from `/api/version`; Dockerfile on Go 1.26.4, port 4000, `BIND_ADDR=0.0.0.0` in the container |
+| D4, D7 | open |
 | D5 | Fixed in #56 and ovander/parashift-frontend#4, #5 (`govulncheck` still not in CI) |
 | U1, U3 | asked |
 | U2 | Answered: app ID **7**, client ID `5Fev…` (the one that was in `.env.example`) |
