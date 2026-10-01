@@ -25,6 +25,10 @@ SERVICE="parashift"
 # called sudo (PARASHIFT_APP_USER overrides it).
 USER="${PARASHIFT_APP_USER:-${SUDO_USER:-}}"
 [ -n "$USER" ] || { echo "❌ Run with sudo from the deploy account, or set PARASHIFT_APP_USER"; exit 1; }
+# The migrations run as the service's own user (User= in the unit; root when
+# unset), the one that can read the env file, which is usually mode 600.
+MIGRATE_USER="$(systemctl show -p User --value "$SERVICE" 2>/dev/null || true)"
+MIGRATE_USER="${MIGRATE_USER:-root}"
 
 # The API listens on 127.0.0.1:$PORT (PORT from the env file, default 4000,
 # as in internal/config). Use 127.0.0.1, not localhost: localhost may resolve
@@ -40,15 +44,22 @@ RELEASE_DIR="$RELEASES_DIR/$VERSION"
 # -----------------------------
 # ROLLBACK
 # -----------------------------
+# PREVIOUS is recorded before the service stops, so a failure at any later
+# step (migrations included) restarts the release that was running.
+PREVIOUS=""
+STOPPED=false
+
 rollback() {
     echo "❌ Deployment failed — rolling back..."
 
-    if [ -n "${PREVIOUS:-}" ]; then
+    if [ -n "$PREVIOUS" ]; then
         sudo ln -sfn "$PREVIOUS" "$CURRENT_LINK"
-        sudo systemctl start $SERVICE
-        echo "✔ Rolled back to previous release"
+        echo "✔ current → $PREVIOUS"
     else
-        echo "⚠️ No previous release to rollback"
+        echo "⚠️ No previous release to switch back to"
+    fi
+    if [ "$STOPPED" = true ] || ! systemctl is-active --quiet $SERVICE; then
+        sudo systemctl start $SERVICE && echo "✔ Service restarted" || echo "❌ Service did not restart: sudo journalctl -u $SERVICE -n 50"
     fi
 
     exit 1
@@ -63,6 +74,8 @@ echo "🔍 Pre-checks..."
 
 [ -f "$TMP_BIN" ]        || { echo "❌ Missing binary in $TMP_BIN — run push.sh first"; exit 1; }
 [ -d "$TMP_MIGRATIONS" ] || { echo "❌ Missing migrations in $TMP_MIGRATIONS"; exit 1; }
+sudo -u "$MIGRATE_USER" test -r "$ENV_FILE" || { echo "❌ $MIGRATE_USER cannot read $ENV_FILE"; exit 1; }
+echo "✔ Migrations will run as $MIGRATE_USER"
 
 echo "✔ Pre-checks OK"
 
@@ -70,7 +83,9 @@ echo "✔ Pre-checks OK"
 # STOP SERVICE
 # -----------------------------
 echo "🛑 Stopping service..."
+PREVIOUS="$(readlink -f $CURRENT_LINK || echo "")"
 sudo systemctl stop $SERVICE
+STOPPED=true
 
 # -----------------------------
 # CREATE RELEASE
@@ -98,7 +113,7 @@ sudo chmod 644 "$MIGRATIONS_DIR"/*.sql || true
 # -----------------------------
 echo "🗄 Running migrations..."
 
-sudo -u $USER bash -c "
+sudo -u "$MIGRATE_USER" bash -c "
 set -a
 source $ENV_FILE
 set +a
@@ -109,8 +124,6 @@ $RELEASE_DIR/app migrate
 # SWITCH RELEASE
 # -----------------------------
 echo "🔁 Switching release..."
-
-PREVIOUS="$(readlink -f $CURRENT_LINK || echo "")"
 
 sudo ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
 

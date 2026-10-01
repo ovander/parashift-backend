@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `deploy-backend.sh`: the migrations run as the service's user (the unit's `User=`, root when
+  unset), which can read the env file, instead of the account that called sudo; the script checks
+  that before stopping the service; and a failure at any step after the stop, migrations
+  included, switches back to the previous release and restarts the service (it used to leave the
+  API stopped).
+
 ## [3.0.0] - 2026-10-01
 
 Sign-in moves to Socrate through a Backend-for-Frontend. **Upgrading from v2.x** needs `.env`
