@@ -38,6 +38,35 @@ jobs:
         with:
           version: v2.5.0
 
+  # The tree is not gofmt-clean yet (backlog); a pull request must not add to it.
+  # Only the Go files the PR adds or changes are checked.
+  gofmt:
+    name: gofmt (changed files)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.4'
+          cache: false
+
+      - name: gofmt -l on changed Go files
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          files=$(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- '*.go')
+          if [ -z "$files" ]; then echo "no Go file changed"; exit 0; fi
+          unformatted=$(echo "$files" | xargs gofmt -l)
+          if [ -n "$unformatted" ]; then
+            echo "Run gofmt -w on:"; echo "$unformatted"; exit 1
+          fi
+
   build-test:
     name: build · vet · test
     runs-on: ubuntu-latest
