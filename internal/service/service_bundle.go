@@ -1,15 +1,6 @@
 package service
 
 import (
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-	"strings"
-	"time"
-
 	"github.com/ovander/backendkit/aigateway"
 	"github.com/ovander/backendkit/socrate"
 	"github.com/ovander/parashift/internal/config"
@@ -41,7 +32,10 @@ type ServiceBundle struct {
 	PublicHoliday       *PublicHolidayService
 	StoreException      *StoreExceptionService
 	Revocation          *RevocationService
-	DB                  *gorm.DB
+	// SocrateClient makes every call to Socrate (OAuth and service-account
+	// admin API). nil when SOCRATE_CLIENT_ID / SOCRATE_CLIENT_SECRET are unset.
+	SocrateClient *socrate.Client
+	DB            *gorm.DB
 }
 
 // NewServiceBundle wires all services with their dependencies.
@@ -82,33 +76,10 @@ func NewServiceBundle(repos *repo.RepoBundle, logger *logrus.Entry, cfgs ...*con
 		cfg = cfgs[0]
 	}
 
-	// Build the Socrate client for service-account operations (invite emails, etc.).
+	// Build the Socrate client: OAuth calls (code exchange, refresh, revocation,
+	// profile) and service-account calls (invite emails, magic links).
 	// A nil client is safe — EmployeeService degrades gracefully to the claim-token path.
-	var socrateClient *socrate.Client
-	if cfg != nil && cfg.Socrate.ClientID != "" && cfg.Socrate.ClientSecret != "" {
-		// If SOCRATE_APP_ID is not set, resolve it automatically from the service
-		// token's sub claim (format: "app:<numeric_id>").  This avoids a manual
-		// copy-paste step and removes the need to re-set the ID after a Socrate
-		// DB reset or app re-registration.
-		appID := cfg.Socrate.AppID
-		if appID == "" {
-			if resolved, err := resolveAppIDFromToken(cfg.Socrate.BaseURL, cfg.Socrate.ClientID, cfg.Socrate.ClientSecret); err == nil {
-				appID = resolved
-				logger.WithField("app_id", appID).Info("SOCRATE_APP_ID resolved automatically from service token sub claim")
-			} else {
-				logger.WithError(err).Warn("SOCRATE_APP_ID not set and auto-resolution failed — service-account calls will fail at runtime")
-			}
-		}
-		if sc, err := socrate.NewClient(socrate.ClientConfig{
-			BaseURL:      cfg.Socrate.BaseURL,
-			AdminBaseURL: cfg.Socrate.AdminURL,
-			ClientID:     cfg.Socrate.ClientID,
-			ClientSecret: cfg.Socrate.ClientSecret,
-			AppID:        appID,
-		}); err == nil {
-			socrateClient = sc
-		}
-	}
+	socrateClient := newSocrateClient(cfg, logger)
 
 	var gateway *aigateway.Client
 	if cfg != nil && cfg.AI.AnthropicAPIKey != "" {
@@ -165,82 +136,49 @@ func NewServiceBundle(repos *repo.RepoBundle, logger *logrus.Entry, cfgs ...*con
 			repos.Employee, emitter, logger.WithField("service", "coverage"),
 		).WithHolidayService(publicHolidaySvc).
 			WithStoreExceptionRepo(repos.StoreException),
-		Availability:       NewAvailabilityService(repos.Availability, repos.Employee, emitter, logger.WithField("service", "availability")),
-		Leave:              NewLeaveService(repos.LeaveRequest, repos.Employee, repos.ShiftAssignment, repos.ShiftInstance, emitter, logger.WithField("service", "leave")),
-		Swap:               swap,
-		Admin:              NewAdminService(repos.AuditLog, repos.DB, logger.WithField("service", "admin")),
-		AdminDashboard:     NewAdminDashboardService(repos.DB, logger.WithField("service", "admin_dashboard")),
-		Rule:               NewRuleService(repos.Rule, logger.WithField("service", "rule")),
-		ShiftSlot:          NewShiftSlotService(repos.ShiftSlot, repos.ShiftInstance, repos.Store, logger.WithField("service", "shift_slot")),
-		AI:                 aiSvc,
-		RuleEngine:         ruleEngine,
-		SchedulePlan:       schedulePlanSvc,
-		Qualification:      qualSvc,
+		Availability:        NewAvailabilityService(repos.Availability, repos.Employee, emitter, logger.WithField("service", "availability")),
+		Leave:               NewLeaveService(repos.LeaveRequest, repos.Employee, repos.ShiftAssignment, repos.ShiftInstance, emitter, logger.WithField("service", "leave")),
+		Swap:                swap,
+		Admin:               NewAdminService(repos.AuditLog, repos.DB, logger.WithField("service", "admin")),
+		AdminDashboard:      NewAdminDashboardService(repos.DB, logger.WithField("service", "admin_dashboard")),
+		Rule:                NewRuleService(repos.Rule, logger.WithField("service", "rule")),
+		ShiftSlot:           NewShiftSlotService(repos.ShiftSlot, repos.ShiftInstance, repos.Store, logger.WithField("service", "shift_slot")),
+		AI:                  aiSvc,
+		RuleEngine:          ruleEngine,
+		SchedulePlan:        schedulePlanSvc,
+		Qualification:       qualSvc,
 		PlanningModelMetric: metricSvc,
 		PublicHoliday:       publicHolidaySvc,
 		StoreException:      storeExceptionSvc,
-		Revocation:         revocationSvc,
+		Revocation:          revocationSvc,
+		SocrateClient:       socrateClient,
 		DB:                  repos.DB,
 	}
 }
 
-// resolveAppIDFromToken exchanges client credentials for a service token and
-// extracts the numeric app ID from the JWT sub claim ("app:<id>").
-// This allows SOCRATE_APP_ID to be omitted from the environment — the ID is
-// always present in the token Socrate issues, so we never need to hard-code it.
-func resolveAppIDFromToken(baseURL, clientID, clientSecret string) (string, error) {
-	tokenURL := strings.TrimRight(baseURL, "/") + "/oauth/token"
-	form := url.Values{
-		"grant_type":    {"client_credentials"},
-		"client_id":     {clientID},
-		"client_secret": {clientSecret},
+// newSocrateClient builds the backendkit Socrate client, or returns nil when
+// the client credentials are not configured.
+//
+// The app ID is SOCRATE_APP_ID, never derived: a service account cannot look
+// up its own app ID at Socrate (GET /api/admin/apps is for human admins), and
+// the app-scoped service routes need it (compat report row K2).
+func newSocrateClient(cfg *config.Config, logger *logrus.Entry) *socrate.Client {
+	if cfg == nil || cfg.Socrate.ClientID == "" || cfg.Socrate.ClientSecret == "" {
+		return nil
 	}
-	client := &http.Client{Timeout: 8 * time.Second}
-	resp, err := client.Post(tokenURL, "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
+	if cfg.Socrate.AppID == "" {
+		logger.Warn("SOCRATE_APP_ID not set — invite emails and other service-account calls will fail")
+	}
+	sc, err := socrate.NewClient(socrate.ClientConfig{
+		BaseURL:      cfg.Socrate.BaseURL,
+		AdminBaseURL: cfg.Socrate.AdminURL,
+		ClientID:     cfg.Socrate.ClientID,
+		ClientSecret: cfg.Socrate.ClientSecret,
+		AppID:        cfg.Socrate.AppID,
+	})
 	if err != nil {
-		return "", err
+		logger.WithError(err).Warn("Socrate client not configured")
+		return nil
 	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var tok struct {
-		AccessToken string `json:"access_token"`
-	}
-	if err := json.Unmarshal(body, &tok); err != nil || tok.AccessToken == "" {
-		return "", fmt.Errorf("token exchange returned no access_token (HTTP %d)", resp.StatusCode)
-	}
-
-	// Decode the JWT payload (middle section, base64url, no padding).
-	parts := strings.Split(tok.AccessToken, ".")
-	if len(parts) != 3 {
-		return "", fmt.Errorf("service token is not a valid JWT")
-	}
-	padded := parts[1]
-	switch len(padded) % 4 {
-	case 2:
-		padded += "=="
-	case 3:
-		padded += "="
-	}
-	payload, err := base64.URLEncoding.DecodeString(padded)
-	if err != nil {
-		return "", fmt.Errorf("failed to decode JWT payload: %w", err)
-	}
-
-	var claims struct {
-		Sub string `json:"sub"`
-	}
-	if err := json.Unmarshal(payload, &claims); err != nil || claims.Sub == "" {
-		return "", fmt.Errorf("JWT payload has no sub claim")
-	}
-
-	// sub format: "app:<numeric_id>"
-	numericID := strings.TrimPrefix(claims.Sub, "app:")
-	if numericID == claims.Sub || numericID == "" {
-		return "", fmt.Errorf("unexpected sub format: %q (expected \"app:<id>\")", claims.Sub)
-	}
-	return numericID, nil
+	return sc
 }
