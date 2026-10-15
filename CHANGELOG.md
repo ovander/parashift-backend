@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- Go 1.27.2 (toolchain, CI, Dockerfile, release workflow) and `golang.org/x/net` v0.60.0: fixes
+  eleven standard-library vulnerabilities that `govulncheck` reports as reachable (`net/http` and
+  its HTTP/2 implementation, `net/textproto`, `crypto/tls`, `html/template`; GO-2026-6599 to
+  GO-2026-6617).
+
 ### Removed
 
 - **BREAKING:** `POST /auth/callback`, `/auth/refresh` and `/auth/logout`, the last routes that
