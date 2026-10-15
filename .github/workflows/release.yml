@@ -29,7 +29,7 @@ jobs:
       # The same toolchain as CI: the one pinned in go.mod (patched standard library).
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.2'
           cache: true
 
       # Fails when CHANGELOG.md has no section for this version.

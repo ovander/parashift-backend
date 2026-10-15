@@ -59,11 +59,11 @@ git diff --name-only --diff-filter=AM origin/main...HEAD -- '*.go' | xargs -r go
 go build ./...
 go vet ./...
 go test -race -covermode=atomic -coverprofile=coverage.out ./...
-golangci-lint run ./...        # v2.14.0, built with Go 1.27.1
+golangci-lint run ./...        # v2.14.0, built with Go 1.27.2
 govulncheck ./...              # no reachable vulnerability
 ```
 
-Go 1.27.1 is pinned by the `toolchain` line in `go.mod`; CI, the Dockerfile and the release
+Go 1.27.2 is pinned by the `toolchain` line in `go.mod`; CI, the Dockerfile and the release
 workflow use it, and CI fails if they drift. Install the linter with the same toolchain:
 `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0`.
 

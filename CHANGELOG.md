@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-10-15
+
+The API takes a BFF session only. **Upgrading from v3.0.0:** deploy after web app v3.0.0 (already
+live); no migration and no new variable. Afterwards remove `SOCRATE_REDIRECT_URL` from the env
+file, the `api.parashift.vandermoten.eu` block from Caddy, and the old `/callback` redirect URI
+from app 7 at Socrate.
+
+### Security
+
+- Go 1.27.2 (toolchain, CI, Dockerfile, release workflow) and `golang.org/x/net` v0.60.0: fixes
+  eleven standard-library vulnerabilities that `govulncheck` reports as reachable (`net/http` and
+  its HTTP/2 implementation, `net/textproto`, `crypto/tls`, `html/template`; GO-2026-6599 to
+  GO-2026-6617).
+
 ### Removed
 
 - **BREAKING:** `POST /auth/callback`, `/auth/refresh` and `/auth/logout`, the last routes that

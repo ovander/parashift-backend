@@ -1,6 +1,6 @@
 # Build with the toolchain pinned in go.mod (patched stdlib), as CI does;
 # go.mod's go directive (1.25) is only the language version.
-FROM golang:1.27.1-alpine AS builder
+FROM golang:1.27.2-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache git ca-certificates
 
