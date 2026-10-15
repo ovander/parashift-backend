@@ -13,6 +13,13 @@ live); no migration and no new variable. Afterwards remove `SOCRATE_REDIRECT_URL
 file, the `api.parashift.vandermoten.eu` block from Caddy, and the old `/callback` redirect URI
 from app 7 at Socrate.
 
+### Security
+
+- Go 1.27.2 (toolchain, CI, Dockerfile, release workflow) and `golang.org/x/net` v0.60.0: fixes
+  eleven standard-library vulnerabilities that `govulncheck` reports as reachable (`net/http` and
+  its HTTP/2 implementation, `net/textproto`, `crypto/tls`, `html/template`; GO-2026-6599 to
+  GO-2026-6617).
+
 ### Removed
 
 - **BREAKING:** `POST /auth/callback`, `/auth/refresh` and `/auth/logout`, the last routes that
