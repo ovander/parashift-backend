@@ -96,7 +96,7 @@ constraints where the decision is made:
 ## Architecture
 
 ```
-browser ── https://parashift.vandermoten.eu ── Caddy ─┬─ /api/* /auth/* → this API (127.0.0.1:$PORT)
+browser ── https://parashift.vandermoten.eu ── Caddy ─┬─ /api/* /bff/* → this API (127.0.0.1:$PORT)
                                                       └─ everything else → the SPA (static files)
 
 API ── OAuth (token, refresh, revoke, profile, JWKS) → https://socrate.vandermoten.eu
@@ -202,7 +202,6 @@ Production (`ENV=production`) refuses to start when a required value is missing 
 | `SOCRATE_APP_ID` | Parashift's numeric app ID at Socrate. Required in production | `7` |
 | `SOCRATE_CLIENT_ID` | OAuth client ID | — (required) |
 | `SOCRATE_CLIENT_SECRET` | OAuth client secret; on the server only | — (required) |
-| `SOCRATE_REDIRECT_URL` | Redirect URI used by the old `/auth/callback` when the SPA sends none | `https://parashift.vandermoten.eu/callback` |
 | `BFF_REDIRECT_URL` | The Backend-for-Frontend's redirect URI, registered exactly at Socrate; on the SPA's origin. Required (https) in production; empty elsewhere turns `/bff` off | `https://parashift.vandermoten.eu/bff/callback` |
 | `BFF_COOKIE_NAME` | Session cookie name, sent as `__Host-<name>` (HttpOnly, Secure, SameSite=Strict, Path=/) | `parashift_session` |
 | `BFF_SESSION_IDLE_TTL`, `BFF_SESSION_ABSOLUTE_TTL` | A session unused this long, or this old, ends (Go durations) | `30m`, `8h` |
@@ -226,11 +225,13 @@ per IP:
 - **Backend-for-Frontend** (`Cache-Control: no-store`): `GET /bff/login?return_to=` (redirects to
   Socrate with PKCE), `GET /bff/callback`, `GET /bff/session` (`{authenticated, user, csrf}`,
   never a token), `POST /bff/logout` (needs `X-CSRF-Token`; revokes the refresh token).
-- **Old token routes**, until the SPA has moved to the BFF: `POST /auth/callback`,
-  `/auth/refresh`, `/auth/logout`.
+
+No route returns a token to the browser (`internal/router/router_no_token_test.go` pins every
+route outside `/api/v1`).
 
 Everything under `/api/v1` needs the BFF session cookie (and `X-CSRF-Token` on POST, PUT, PATCH
-and DELETE) or, during the transition, a Socrate access token (`Authorization: Bearer …`).
+and DELETE); a bearer without a session is refused. In production the API does not start without
+the BFF.
 
 | Area | Routes (under `/api/v1`) |
 |---|---|
@@ -322,7 +323,7 @@ SSH_HOST=vps.example.com
 SSH_PORT=22
 ```
 
-Caddy proxies `/api/*` and `/auth/*` to `127.0.0.1:$PORT` (not `localhost`, which may resolve to
+Caddy proxies `/api/*` and `/bff/*` to `127.0.0.1:$PORT` (not `localhost`, which may resolve to
 `::1`) and must not set `trusted_proxies`. A release is an annotated `vX.Y.Z` tag on `main` with
 its `CHANGELOG.md` section; pushing the tag publishes a GitHub Release with Linux binaries
 (`.github/workflows/release.yml`). Back up the database before a release with a migration, and
@@ -344,15 +345,15 @@ audit, its findings and their status are in
 - Every Socrate call goes through `backendkit`; secrets come from the environment only.
 - Errors: internal and upstream details are logged, never returned; every error carries an i18n
   key for the web app.
-- Known gap, being closed: `/auth/callback` and `/auth/refresh` return tokens to the browser until
-  sign-in moves to the Backend-for-Frontend.
+- No token in the browser: sign-in runs on the server (`/bff`), the browser holds an HttpOnly
+  `__Host-` session cookie and a CSRF token, and `/api/v1` takes a session only.
 
 ---
 
 ## Status
 
-Deployed at `https://parashift.vandermoten.eu`. In progress: sign-in through a
-Backend-for-Frontend (no token in the browser), then removal of the `/auth` token routes. Known
+Deployed at `https://parashift.vandermoten.eu`, signing in through Socrate with a
+Backend-for-Frontend (see `docs/SOCRATE-MIGRATION-2026-10-01.md`). Known
 limits: one PostgreSQL primary, no outbound webhooks yet, AI insights need an external scheduler,
 and AI quality improves with a few weeks of history.
 

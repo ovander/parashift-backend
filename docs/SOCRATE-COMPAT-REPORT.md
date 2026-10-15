@@ -145,14 +145,14 @@ Ranked most severe first. *Fix* names the PR in the plan (§6) that closes the r
 | S4 | Fixed in PR 3: the role is `app_roles[SOCRATE_CLIENT_ID]` (`middleware.AppRole`), `user` without one; the audience check stays on |
 | S5 | Fixed in PR 5: `middleware.AttributionIP` trusts `X-Forwarded-For` from a loopback peer only (rightmost non-loopback entry); the per-IP limiters key on it, and `SocrateClientAttribution` sends it to Socrate |
 | S6, S7 | Fixed in PR 4: production binds `127.0.0.1` (`BIND_ADDR` overrides; an empty value counts as unset); `ENV` is required, and `/api/v1/debug/token` is served only with `ENV=development` |
-| S3 | Partly fixed in PR 7: `/bff/*` signs in without giving the browser a token; `/auth/*` still returns tokens until PR 9 removes it |
+| S3 | Fixed in PR 9: `/auth/callback`, `/auth/refresh` and `/auth/logout` removed; `/api/v1` takes a BFF session only (a bearer alone is refused) and production does not start without the BFF; `router_no_token_test.go` pins every route outside `/api/v1` |
 | S9 | Fixed in PR 7 for BFF sessions: the session keeps the e-mail only when Socrate has verified it, and the session middleware hands it to the invite claim |
 | S2 | Fixed in production with web app v3.0.0 (ovander/parashift-frontend#8): no token in browser storage, CSP `connect-src 'self'`, `noBrowserTokens` test |
 | S10 | open (runbook, after PR 9) |
 | K1, K6 | Fixed in PR 2: backendkit v1.15.1; every Socrate call through `socrate.Client`; the admin probe and the JWT decoding are gone; the JWKS GET is the one documented start-up check |
 | K2–K4 | Fixed in PR 4: `SOCRATE_APP_ID` (positive integer) and `SOCRATE_ADMIN_URL` required in production, never derived; URLs absolute, no trailing slash, https for the base and JWKS URLs; `SOCRATE_ISSUER` defaults to `SOCRATE_BASE_URL` and must equal it in production |
 | K5 | Decided 2026-10-01: magic links dropped; "resend invite" will send a claim link (PR 7) |
-| K7 | PR 7 adds `BFF_REDIRECT_URL` (required in production); `SOCRATE_REDIRECT_URL` goes with `/auth/*` in PR 9 |
+| K7 | Fixed: `BFF_REDIRECT_URL` (required in production, PR 7); `SOCRATE_REDIRECT_URL` removed in PR 9 |
 | D6 | Fixed in PR 4 (README env block and `.env.example`) |
 | D1–D3 | Fixed in PR 6: the deploy health check calls `http://127.0.0.1:$PORT/healthz` (PORT from the env file) and reads the version from `/api/version`; Dockerfile on Go 1.26.4, port 4000, `BIND_ADDR=0.0.0.0` in the container. The first real run found three more: #68 (migrations as the service user; rollback always restarts) and #69 (migrations from the app directory) |
 | D4, D7 | open |

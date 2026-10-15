@@ -173,7 +173,7 @@ Each lesson is the symptom, the cause, and the rule we keep. Times are UTC.
 
 ## 4. Still to do
 
-- [ ] PR 9: remove `/auth/callback|refresh|logout` and bearer-only access to `/api/v1`, with a test
+- [x] PR 9: remove `/auth/callback|refresh|logout` and bearer-only access to `/api/v1`, with a test
       that no route returns a token; release v3.1.0.
 - [ ] Then: remove the `api.parashift.vandermoten.eu` Caddy block and `SOCRATE_REDIRECT_URL`;
       remove the old `/callback` redirect URI from app 7.

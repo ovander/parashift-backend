@@ -75,19 +75,15 @@ func NewRouter(cfg *config.Config, handlers *handler.HandlerBundle, mw Middlewar
 	r.Get("/readyz", handlers.Health.Ready)
 	r.Get("/api/version", handlers.Version.Get)
 
-	// Auth endpoints are public but rate-limited to resist brute-force and
-	// credential-stuffing. A per-IP (not per-tenant) limiter is used here because
-	// tenant context is not yet available at this stage of the request lifecycle.
-	// Keying per source IP (20 req/s, burst 40) stops automated attacks from a
-	// single origin without letting one abuser lock out everyone else (SEC-3).
-	authLim := newIPRateLimiter(20, 40).middleware
-	r.With(authLim).Post("/auth/callback", handlers.Auth.Callback)
-	r.With(authLim).Post("/auth/refresh", handlers.Auth.Refresh)
-	r.Post("/auth/logout", handlers.Auth.Logout)
-
 	// Backend-for-Frontend: server-side sign-in and session (cookie + CSRF).
 	// Tokens stay on the server; the browser gets an HttpOnly session cookie.
-	// Every response is Cache-Control: no-store (BFFHandler).
+	// Every response is Cache-Control: no-store (BFFHandler). No route hands a
+	// token to the browser: the former /auth/callback, /auth/refresh and
+	// /auth/logout are gone (report row S3).
+	//
+	// Sign-in is public but rate-limited to resist brute force: per source IP
+	// (20 req/s, burst 40), since there is no tenant yet (SEC-3).
+	authLim := newIPRateLimiter(20, 40).middleware
 	if mw.BFF != nil && mw.BFF.Handler != nil {
 		r.Route("/bff", func(r chi.Router) {
 			r.Use(authLim)

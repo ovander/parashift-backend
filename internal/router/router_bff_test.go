@@ -188,7 +188,7 @@ func newBFFEnv(t *testing.T) *bffEnv {
 		Auth:   authStub,
 		RBAC:   middleware.NewRBACMiddleware(le),
 		Logger: lg,
-		BFF:    &BFF{Handler: h, Session: middleware.NewSessionAuth(gw, true, le)},
+		BFF:    &BFF{Handler: h, Session: middleware.NewSessionAuth(gw, le)},
 	})
 	return e
 }
@@ -447,7 +447,7 @@ func TestBFF_ReturnToIsSanitised(t *testing.T) {
 	}
 }
 
-func TestBFF_ProtectedRoutesNeedASessionOrABearer(t *testing.T) {
+func TestBFF_ProtectedRoutesNeedASession(t *testing.T) {
 	e := newBFFEnv(t)
 	for _, target := range []string{"/api/v1/me", "/api/v1/stores/me", "/api/v1/admin/stats"} {
 		w := e.do(e.browser(http.MethodGet, target, nil))
@@ -466,13 +466,12 @@ func TestBFF_ProtectedRoutesNeedASessionOrABearer(t *testing.T) {
 	}
 }
 
-// During the transition the current SPA still sends its own bearer, without a
-// session: it goes to the auth middleware untouched.
-func TestBFF_BearerWithoutSessionStillPasses(t *testing.T) {
+// A bearer without a session is refused: the browser holds no token, so a
+// bearer alone is not a browser (report rows S2, S3).
+func TestBFF_BearerWithoutSessionIsRefused(t *testing.T) {
 	e := newBFFEnv(t)
-	assert.Equal(t, http.StatusNoContent, e.api(nil, "spa-token"))
-	assert.Equal(t, "Bearer spa-token", e.seen.authorization)
-	assert.Empty(t, e.seen.email)
+	assert.Equal(t, http.StatusUnauthorized, e.api(nil, "stolen-or-old-token"))
+	assert.Zero(t, e.seen.calls, "nothing reached the auth middleware")
 }
 
 // With a session, the session's access token replaces any bearer the browser
